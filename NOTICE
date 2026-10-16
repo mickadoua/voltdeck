@@ -1,0 +1,20 @@
+Voltdeck
+Copyright 2026 The Voltdeck Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Voltdeck decodes the Bluetooth Low Energy protocols of third-party equipment.
+Protocol knowledge comes from manufacturer documentation and from the Apache-2.0,
+MIT, BSD-3-Clause and Unlicense projects listed below. No source code from these
+projects is copied: decoders are rewritten in Kotlin from their specifications.
+Test vectors taken from them are credited in the file that uses them.
+
+  - Victron Energy, "Extra manufacturer Data" (2022-12-14), Instant Readout advertisements
+  - patman15/aiobmsble and patman15/BMS_BLE-HA (Apache-2.0), JBD protocol
+  - syssi/esphome-jbd-bms (Apache-2.0), JBD protocol
+  - sshoecraft/jbdtool (BSD-3-Clause), JBD register map
+  - rajlaud/victron-ble-ha-parser (Apache-2.0), keshavdv/victron-ble (Unlicense), Victron reference vectors
+
+Victron, Ultimatron and Jiabaida are trademarks of their respective owners. They are
+mentioned only to state which equipment Voltdeck is compatible with. Voltdeck is not
+affiliated with them.
