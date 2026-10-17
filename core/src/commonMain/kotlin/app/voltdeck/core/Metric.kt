@@ -30,4 +30,17 @@ enum class Metric(val unit: String) {
     PROTECTION_FLAGS("bits"),
     ALARM_REASON("bits"),
     OFF_REASON("bits"),
+
+    // Métriques dérivées par le stockage (VOL-7), à pleine résolution : un pilote ne les émet jamais.
+    // Seule la colonne `sum` des agrégats a un sens pour elles.
+    /** Énergie entrée dans la batterie (ou fournie côté batterie pour un MPPT), intégrée sur V × I. */
+    ENERGY_IN_WH("Wh"),
+
+    /** Énergie sortie de la batterie, intégrée sur V × I. */
+    ENERGY_OUT_WH("Wh"),
+    CHARGE_IN_AH("Ah"),
+    CHARGE_OUT_AH("Ah"),
+
+    /** Énergie solaire intégrée sur `PV_POWER` (côté panneaux, pertes du convertisseur comprises). */
+    PV_ENERGY_WH("Wh"),
 }

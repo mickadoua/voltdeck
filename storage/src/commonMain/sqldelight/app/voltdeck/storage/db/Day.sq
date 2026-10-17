@@ -1,0 +1,37 @@
+selectDay:
+SELECT * FROM agg_day
+WHERE device_id = ? AND metric = ? AND channel = ? AND day >= ? AND day < ?
+ORDER BY day;
+
+-- Recalcul d'un jour local depuis les heures dont le début tombe dans [début, fin) (idempotent).
+rollupDay:
+INSERT OR REPLACE INTO agg_day(device_id, metric, channel, day, tz_id, count, min, max, sum, last)
+SELECT g.device_id, g.metric, g.channel, ?1, ?2, g.count, g.min, g.max, g.sum,
+       (SELECT x.last FROM agg_hour x
+         WHERE x.device_id = g.device_id AND x.metric = g.metric AND x.channel = g.channel
+           AND x.bucket_start >= ?3 AND x.bucket_start < ?4
+         ORDER BY x.bucket_start DESC LIMIT 1)
+FROM (
+  SELECT device_id, metric, channel,
+         SUM(count) AS count, MIN(min) AS min, MAX(max) AS max, SUM(sum) AS sum
+  FROM agg_hour
+  WHERE bucket_start >= ?3 AND bucket_start < ?4
+  GROUP BY device_id, metric, channel
+) g;
+
+-- Un jour qui n'a plus aucune heure source (par exemple après un changement de fuseau) ne doit pas garder de ligne périmée.
+deleteDayRows:
+DELETE FROM agg_day WHERE day = ?;
+
+upsertDay:
+INSERT OR REPLACE INTO agg_day(device_id, metric, channel, day, tz_id, count, min, max, sum, last)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+countDays:
+SELECT COUNT(*) FROM agg_day;
+
+selectLatestDay:
+SELECT * FROM agg_day WHERE device_id = ? AND metric = ? AND channel = ? ORDER BY day DESC LIMIT 1;
+
+dayBounds:
+SELECT MIN(day) AS first_day, MAX(day) AS last_day FROM agg_day;
