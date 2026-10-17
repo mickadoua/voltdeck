@@ -10,11 +10,13 @@ import app.voltdeck.ble.PlatformDeviceId
 import app.voltdeck.ble.ReadAllowlist
 import app.voltdeck.ble.ReadOnlyGattLink
 import app.voltdeck.ble.ScanFilter
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlin.math.abs
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -23,14 +25,18 @@ import kotlin.time.Duration.Companion.seconds
  * puis refuse, comme le vrai transport, toute commande hors de [ReadAllowlist].
  *
  * Les annonces sont factices : la charge utile Victron est un gabarit non chiffré qui ne ressemble à aucun
- * enregistrement réel, et le lien GATT n'émet aucune notification. Les vrais encodages arrivent avec VOL-5 et VOL-6.
- * Non thread-safe.
+ * enregistrement réel (le vrai encodage arrive avec VOL-5). Le lien GATT de la batterie répond par de vraies trames JBD
+ * ([SimulatedJbdBms]), selon le [JbdScenario] choisi. Non thread-safe.
  */
 class SimulatedTransport(
     private val seed: Long = 1L,
     private val advertisementPeriod: Duration = 1.seconds,
+    jbdScenario: JbdScenario = JbdScenario.Nominal,
+    clock: Clock = Clock.System,
+    plant: SimulatedPlant = SimulatedPlant(seed, jbdScenario.plantStart(clock.now())),
 ) : BleTransport {
     private val accepted = mutableListOf<ByteArray>()
+    private val bms = SimulatedJbdBms(plant, jbdScenario, clock)
 
     /** Trames acceptées par les liens GATT de ce transport, dans l'ordre. */
     val acceptedFrames: List<ByteArray> get() = accepted.map { it.copyOf() }
@@ -52,20 +58,46 @@ class SimulatedTransport(
         val template = templates.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
         val ledger = ConnectionLedger().apply { record(template.toAdv(rssi = -60)) }
         ledger.requireConnectable(id, profile)
+        bms.markConnectAttempt()
+        if (bms.isOffline()) throw SimulatedLinkException("BMS simulé hors de portée")
         return SimulatedGattLink()
     }
 
+    /**
+     * Lien GATT du BMS simulé : à chaque requête autorisée, les notifications portent la vraie trame JBD de réponse,
+     * découpée en morceaux de 20 octets. Les scénarios de [JbdScenario] y ajoutent coupures, trames corrompues et
+     * premières écritures en échec.
+     */
     inner class SimulatedGattLink internal constructor() : ReadOnlyGattLink {
-        override val notifications: Flow<ByteArray> = emptyFlow()
+        private val inbox = Channel<ByteArray>(Channel.UNLIMITED)
+        private var failuresLeft = bms.failuresPerConnection()
+        private var lost = false
 
-        override suspend fun request(cmd: AllowedCommand) = requestFrame(cmd.frame())
+        override val notifications: Flow<ByteArray> = inbox.receiveAsFlow()
+
+        override suspend fun request(cmd: AllowedCommand) {
+            requestFrame(cmd.frame())
+            bms.respond(cmd).forEach { inbox.trySend(it) }
+        }
 
         internal fun requestFrame(frame: ByteArray) {
             ReadAllowlist.requireAllowed(frame)
+            if (lost || bms.isOffline()) {
+                lost = true
+                val cause = SimulatedLinkException("liaison perdue")
+                inbox.close(cause)
+                throw cause
+            }
+            if (failuresLeft > 0) {
+                failuresLeft--
+                throw SimulatedLinkException("écriture simulée en échec")
+            }
             accepted += frame.copyOf()
         }
 
-        override fun close() = Unit
+        override fun close() {
+            inbox.close()
+        }
     }
 
     private class Template(
