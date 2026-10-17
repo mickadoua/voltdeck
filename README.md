@@ -7,6 +7,15 @@ Tableau de bord mobile (Android et iOS), **en lecture seule**, qui réunit en un
 - Aucun réglage modifié : l'app lit, elle n'écrit jamais.
 - Pilotes d'équipements enfichables pour ajouter d'autres marques.
 
+<p>
+  <img src="docs/screenshots/accueil.png" width="200" alt="Vue d'ensemble : solaire, batterie, consommation">
+  <img src="docs/screenshots/stats-jour.png" width="200" alt="Statistiques du jour : énergie par heure">
+  <img src="docs/screenshots/stats-semaine.png" width="200" alt="Statistiques de la semaine : énergie par jour">
+  <img src="docs/screenshots/stats-semaine-clair.png" width="200" alt="Statistiques de la semaine, thème clair">
+</p>
+
+Captures du mode démo : valeurs simulées, avec 60 jours d'historique générés au lancement.
+
 > État : socle technique (Kotlin Multiplatform, contrats BLE, simulateur, mode démo) et premier pilote : Victron Instant Readout (SmartSolar MPPT, SmartShunt / BMV, Orion Smart DC-DC), validé sur des vecteurs de référence et sur le simulateur, pas encore sur du matériel réel.
 
 ## Lecture seule, garantie par quatre verrous
