@@ -224,39 +224,43 @@ private fun EnergyBars(slots: List<Instant>, d: StatsData, zone: TimeZone) {
     )
     Row(Modifier.fillMaxWidth()) {
         Column(Modifier.height(160.dp).padding(end = 6.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            listOf(1.0, 0.5, 0.0).forEach { Txt(frDecimal(top * it, 0), 11.sp, color = p.muted) }
+            listOf(1.0, 0.5, 0.0).forEach { Txt(frDecimal(top * it, if (top < 10.0) 1 else 0), 11.sp, color = p.muted) }
         }
-        Canvas(
-            Modifier
-                .weight(1f)
-                .height(160.dp)
-                .semantics { contentDescription = "Énergie produite et consommée, ${slots.size} périodes" }
-                .pointerInput(slots.size) {
-                    detectTapGestures { pos -> selected = (pos.x / size.width * slots.size).toInt().coerceIn(0, slots.size - 1) }
-                },
-        ) {
-            val slotWidth = size.width / slots.size
-            val barWidth = (slotWidth / 2.6f).coerceAtMost(12.dp.toPx())
-            listOf(0.0, 0.5, 1.0).forEach { f ->
-                val y = size.height * (1 - f.toFloat())
-                drawLine(p.grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-            }
-            values.forEachIndexed { i, b ->
-                val center = slotWidth * (i + 0.5f)
-                if (i == selected) drawRect(p.grid, Offset(slotWidth * i, 0f), Size(slotWidth, size.height))
-                fun bar(value: Double?, x: Float, color: Color) {
-                    if (value == null || value <= 0) return
-                    val h = (value / top).toFloat() * size.height
-                    drawRoundRect(color, Offset(x, size.height - h), Size(barWidth, h), CornerRadius(2.dp.toPx()))
+        Column(Modifier.weight(1f)) {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .semantics { contentDescription = "Énergie produite et consommée, ${slots.size} périodes" }
+                    .pointerInput(slots.size) {
+                        detectTapGestures { pos -> selected = (pos.x / size.width * slots.size).toInt().coerceIn(0, slots.size - 1) }
+                    },
+            ) {
+                val slotWidth = size.width / slots.size
+                val barWidth = (slotWidth / 2.6f).coerceAtMost(12.dp.toPx())
+                listOf(0.0, 0.5, 1.0).forEach { f ->
+                    val y = size.height * (1 - f.toFloat())
+                    drawLine(p.grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
                 }
-                bar(b?.producedWh, center - barWidth - 1.dp.toPx(), p.solar)
-                bar(b?.consumedWh, center + 1.dp.toPx(), p.load)
+                values.forEachIndexed { i, b ->
+                    val center = slotWidth * (i + 0.5f)
+                    if (i == selected) drawRect(p.grid, Offset(slotWidth * i, 0f), Size(slotWidth, size.height))
+                    fun bar(value: Double?, x: Float, color: Color) {
+                        if (value == null || value <= 0) return
+                        val h = (value / top).toFloat() * size.height
+                        drawRoundRect(color, Offset(x, size.height - h), Size(barWidth, h), CornerRadius(2.dp.toPx()))
+                    }
+                    bar(b?.producedWh, center - barWidth - 1.dp.toPx(), p.solar)
+                    bar(b?.consumedWh, center + 1.dp.toPx(), p.load)
+                }
+            }
+            Row(Modifier.fillMaxWidth()) {
+                val step = (slots.size / 4).coerceAtLeast(1)
+                slots.indices.filter { it % step == 0 }.forEach {
+                    Txt(slotLabel(slots[it], d.level, zone), 11.sp, color = p.muted, modifier = Modifier.weight(minOf(step, slots.size - it).toFloat()))
+                }
             }
         }
-    }
-    Row(Modifier.fillMaxWidth().padding(start = 28.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        val step = (slots.size / 4).coerceAtLeast(1)
-        slots.indices.filter { it % step == 0 }.forEach { Txt(slotLabel(slots[it], d.level, zone), 11.sp, color = p.muted) }
     }
     peak?.let { Txt("Pic de production : ${wh(values[it]?.producedWh)} (${slotLabel(slots[it], d.level, zone)})", 12.sp, FontWeight.Bold, p.ink2) }
 }
