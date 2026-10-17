@@ -101,7 +101,10 @@ class VoltdeckRuntime(
         version.update { it + 1 }
     }
 
-    fun setupOf(id: DeviceId): ShuntSetup = shuntSetups.get(id) ?: ShuntSetup.DEFAULT
+    fun setupOf(id: DeviceId): ShuntSetup = shuntSetups.get(id) ?: detectedSetup(latestState.value[id]) ?: ShuntSetup.DEFAULT
+
+    /** Ce que le shunt annonce de lui-même, indépendamment du réglage de l'utilisateur. */
+    fun announcedSetup(id: DeviceId): ShuntSetup? = detectedSetup(latestState.value[id])
 
     fun saveSetup(id: DeviceId, setup: ShuntSetup) {
         shuntSetups.put(id, setup)

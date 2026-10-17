@@ -115,6 +115,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                 is Screen.Shunt -> ShuntScreen(
                     title = session.title(current.device.deviceId),
                     status = statuses[current.device.deviceId] ?: VictronLinkStatus.WAITING,
+                    announced = runtime.announcedSetup(current.device.deviceId),
                     initial = setupOf(current.device.deviceId),
                     onBack = { screen = Screen.Devices },
                     onSave = {
