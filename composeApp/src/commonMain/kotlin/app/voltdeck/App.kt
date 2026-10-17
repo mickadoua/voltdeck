@@ -129,7 +129,10 @@ fun App(
                             if (devices.isEmpty()) {
                                 EmptyState { screen = Screen.AddDevice }
                             } else {
-                                OverviewContent(buildOverview(devices, latest, setupOf), Modifier.fillMaxSize())
+                                Column(Modifier.fillMaxSize()) {
+                                    if (session is DemoSession && live != null) DemoBanner { screen = Screen.AddDevice }
+                                    OverviewContent(buildOverview(devices, latest, setupOf), Modifier.weight(1f))
+                                }
                             }
                         } else {
                             DevicesScreen(
@@ -153,6 +156,27 @@ fun App(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DemoBanner(onAdd: () -> Unit) {
+    val p = LocalPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .background(p.warnBg, RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button, onClick = onAdd)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Txt("Valeurs simulées", 15.sp, FontWeight.Bold, p.warnText)
+            Txt("Ajoutez vos équipements pour voir votre installation.", 13.sp, color = p.warnText)
+        }
+        Txt("Ajouter", 14.sp, FontWeight.Bold, p.onAccent, Modifier.background(p.accent, CircleShape).padding(horizontal = 16.dp, vertical = 12.dp))
     }
 }
 
