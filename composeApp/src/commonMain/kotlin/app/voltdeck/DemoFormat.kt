@@ -3,6 +3,7 @@ package app.voltdeck
 import app.voltdeck.core.DeviceId
 import app.voltdeck.core.Metric
 import app.voltdeck.core.Sample
+import app.voltdeck.drivers.jbd.JbdProtectionFlag
 import app.voltdeck.simulator.SimulatedPlant
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -33,10 +34,47 @@ fun sampleLabel(sample: Sample): String = when (sample.metric) {
     Metric.YIELD_TODAY -> "Production du jour"
     Metric.TEMPERATURE -> "Température sonde ${sample.channel + 1}"
     Metric.CELL_VOLTAGE -> "Cellule ${sample.channel + 1}"
+    Metric.PROTECTION_FLAGS -> "Alarmes"
+    Metric.DEVICE_STATE -> "Relais de la batterie"
     else -> sample.metric.name
 }
 
+/** Alarmes de protection du BMS JBD (bits du registre 0x03, voir [JbdProtectionFlag]). */
+fun protectionText(mask: Int): String {
+    val active = JbdProtectionFlag.active(mask)
+    return if (active.isEmpty()) "Aucune" else active.joinToString(", ") { it.frenchLabel() }
+}
+
+/** Relais du BMS JBD : bit 0 = charge, bit 1 = décharge (registre 0x03, octet d'état des FET). */
+fun relayText(mask: Int): String = when (mask and 0x03) {
+    0x03 -> "Charge et décharge actives"
+    0x02 -> "Charge coupée"
+    0x01 -> "Décharge coupée"
+    else -> "Charge et décharge coupées"
+}
+
+private fun JbdProtectionFlag.frenchLabel(): String = when (this) {
+    JbdProtectionFlag.CELL_OVERVOLTAGE -> "surtension cellule"
+    JbdProtectionFlag.CELL_UNDERVOLTAGE -> "sous-tension cellule"
+    JbdProtectionFlag.PACK_OVERVOLTAGE -> "surtension batterie"
+    JbdProtectionFlag.PACK_UNDERVOLTAGE -> "sous-tension batterie"
+    JbdProtectionFlag.CHARGE_OVER_TEMPERATURE -> "surchauffe en charge"
+    JbdProtectionFlag.CHARGE_UNDER_TEMPERATURE -> "température trop basse en charge"
+    JbdProtectionFlag.DISCHARGE_OVER_TEMPERATURE -> "surchauffe en décharge"
+    JbdProtectionFlag.DISCHARGE_UNDER_TEMPERATURE -> "température trop basse en décharge"
+    JbdProtectionFlag.CHARGE_OVERCURRENT -> "surintensité en charge"
+    JbdProtectionFlag.DISCHARGE_OVERCURRENT -> "surintensité en décharge"
+    JbdProtectionFlag.SHORT_CIRCUIT -> "court-circuit"
+    JbdProtectionFlag.FRONT_END_IC_ERROR -> "erreur du circuit frontal"
+    JbdProtectionFlag.MOSFET_SOFTWARE_LOCK -> "verrou logiciel des MOSFET"
+}
+
 fun sampleText(sample: Sample): String {
+    when (sample.metric) {
+        Metric.PROTECTION_FLAGS -> return protectionText(sample.value.toInt())
+        Metric.DEVICE_STATE -> return relayText(sample.value.toInt())
+        else -> Unit
+    }
     val decimals = when (sample.metric) {
         Metric.CELL_VOLTAGE -> 3
         Metric.SOC, Metric.REMAINING_CAPACITY, Metric.NOMINAL_CAPACITY, Metric.TEMPERATURE -> 1

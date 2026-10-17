@@ -31,4 +31,20 @@ class DemoFormatTest {
     fun indexedMetricsAreNumberedFromOne() {
         assertEquals("Cellule 3", sampleLabel(Sample(Metric.CELL_VOLTAGE, 2, 3.3)))
     }
+
+    @Test
+    fun protectionAlarmsAreListedInFrench() {
+        assertEquals("Aucune", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 0.0)))
+        assertEquals("surtension cellule", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 1.0)))
+        assertEquals("surtension cellule, court-circuit", protectionText(0x401))
+        assertEquals("Alarmes", sampleLabel(Sample(Metric.PROTECTION_FLAGS, value = 0.0)))
+    }
+
+    @Test
+    fun relayStateTellsWhichDirectionIsCut() {
+        assertEquals("Charge et décharge actives", relayText(3))
+        assertEquals("Charge coupée", relayText(2))
+        assertEquals("Décharge coupée", relayText(1))
+        assertEquals("Charge et décharge coupées", relayText(0))
+    }
 }
