@@ -134,9 +134,9 @@ class VoltdeckRuntime(
             while (true) {
                 delay(FLUSH_PERIOD)
                 val now = session.clock.now()
-                write(aggregator) { aggregator?.flushClosed(now) }
+                persist(aggregator) { aggregator?.flushClosed(now) }
                 if (maintenance != null && now - lastMaintenance >= 1.hours) {
-                    write(aggregator) { maintenance.run(now, zone) }
+                    persist(aggregator) { maintenance.run(now, zone) }
                     lastMaintenance = now
                 }
             }
@@ -144,11 +144,11 @@ class VoltdeckRuntime(
         try {
             session.readings().collect { reading ->
                 latestState.update { it + (reading.deviceId to reading) }
-                write(aggregator) { aggregator?.add(reading) }
+                persist(aggregator) { aggregator?.add(reading) }
             }
         } finally {
             ticker.cancel()
-            write(aggregator) { aggregator?.flushAll() }
+            persist(aggregator) { aggregator?.flushAll() }
         }
     }
 
@@ -165,7 +165,7 @@ class VoltdeckRuntime(
         }
     }
 
-    private inline fun write(aggregator: MinuteAggregator?, block: () -> Unit) {
+    private inline fun persist(aggregator: MinuteAggregator?, block: () -> Unit) {
         if (aggregator == null) return
         try {
             val before = aggregator.pendingCount
