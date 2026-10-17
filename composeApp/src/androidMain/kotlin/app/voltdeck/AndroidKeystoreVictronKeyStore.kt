@@ -64,11 +64,11 @@ class AndroidKeystoreVictronKeyStore(context: Context) : VictronKeyStore {
         } finally {
             plain.fill(0)
         }
-        prefs.edit().putString(device.value, Base64.encodeToString(blob, Base64.NO_WRAP)).commit()
+        check(prefs.edit().putString(device.value, Base64.encodeToString(blob, Base64.NO_WRAP)).commit()) { "Écriture de la clé refusée" }
     }
 
     override fun remove(device: DeviceId) {
-        prefs.edit().remove(device.value).commit()
+        check(prefs.edit().remove(device.value).commit()) { "Effacement de la clé refusé" }
     }
 
     private fun wrappingKey(): SecretKey {
