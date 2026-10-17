@@ -18,7 +18,11 @@ import kotlin.time.Instant
  *
  * Les équipements pris en compte sont ceux de [DeviceStore] actifs pendant la période demandée.
  */
-class SystemStats(database: VoltdeckDatabase) {
+class SystemStats(
+    database: VoltdeckDatabase,
+    /** Faux pour un shunt monté sur un circuit (consommation ou source) : il ne mesure pas le flux de la batterie. */
+    private val measuresBattery: (DeviceId) -> Boolean = { true },
+) {
     private val devices = DeviceStore(database)
     private val reader = AggregateReader(database)
 
@@ -111,7 +115,7 @@ class SystemStats(database: VoltdeckDatabase) {
      * L'estimation est absente sous [MIN_ESTIMATE_HOURS] heures de données, ou si la batterie se charge en moyenne.
      */
     fun autonomy(now: Instant, maxAge: Duration = 10.minutes): Stat {
-        val shunt = activeDevices(DeviceRole.SHUNT, now, now).firstOrNull()
+        val shunt = activeDevices(DeviceRole.SHUNT, now, now).firstOrNull { measuresBattery(it.id) }
         if (shunt != null) {
             val timeToGo = freshLatest(SeriesKey(shunt.id, Metric.TIME_TO_GO), now, maxAge)
             if (timeToGo != null) return Stat(timeToGo.stats.last / 60.0, "h", Nature.DEVICE_COMPUTED)
@@ -166,11 +170,11 @@ class SystemStats(database: VoltdeckDatabase) {
         devices.all().filter { it.role == role && it.isActiveDuring(from, to.coerceAtLeast(from + 1.seconds)) }
 
     /**
-     * Capteur du flux net de la batterie : le shunt s'il existe, sinon le BMS (VOL-1 §11-5). Un shunt enregistré
+     * Capteur du flux net de la batterie : le shunt monté sur la batterie s'il existe, sinon le BMS (VOL-1 §11-5). Un shunt enregistré
      * qui n'a aucune mesure utile sur la période cède la place au BMS qui en a ; si aucun n'en a, le premier candidat.
      */
     private fun flowDevice(from: Instant, to: Instant, hasData: (DeviceInfo) -> Boolean): DeviceInfo? {
-        val candidates = activeDevices(DeviceRole.SHUNT, from, to) + activeDevices(DeviceRole.BATTERY, from, to)
+        val candidates = activeDevices(DeviceRole.SHUNT, from, to).filter { measuresBattery(it.id) } + activeDevices(DeviceRole.BATTERY, from, to)
         return candidates.firstOrNull(hasData) ?: candidates.firstOrNull()
     }
 
