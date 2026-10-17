@@ -26,7 +26,7 @@ import kotlin.time.Instant
 /**
  * Modèle physique minimal et déterministe d'un système 12 V : un MPPT, une batterie LiFePO4 4S de 200 Ah, un
  * SmartShunt sur cette batterie et une consommation (base + frigo par cycles). Les mesures sont des valeurs synthétiques : aucune ne
- * vient du matériel du fondateur.
+ * vient d'un matériel réel.
  *
  * Déterminisme : mêmes `seed`, `start` et `zone`, et mêmes instants demandés => mêmes [Reading]. Le bruit est
  * une fonction pure de (graine, canal, seconde). L'état de charge est intégré par pas d'une minute simulée.
