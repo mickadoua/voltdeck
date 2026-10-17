@@ -62,6 +62,7 @@ private sealed interface Screen {
     data object Overview : Screen
     data object Devices : Screen
     data object AddDevice : Screen
+    data object Diagnostic : Screen
     data class Shunt(val device: KnownDevice) : Screen
 }
 
@@ -110,6 +111,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                         screen = Screen.Overview
                     },
                 )
+                Screen.Diagnostic -> DiagnosticScreen(runtime) { screen = Screen.Devices }
                 Screen.AddDevice -> if (live != null) {
                     AddDeviceScreen(live, bluetooth, onBack = { screen = Screen.Devices }, onAdded = {
                         runtime.setDemo(false)
@@ -146,6 +148,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                                 onScenario = { runtime.setScenario(it) },
                                 onShunt = { screen = Screen.Shunt(it) },
                                 onAdd = { screen = Screen.AddDevice },
+                                onDiagnostic = { screen = Screen.Diagnostic },
                                 onRemove = { id ->
                                     live?.remove(id)
                                     runtime.devicesChanged()
@@ -255,6 +258,7 @@ private fun DevicesScreen(
     onScenario: (SimulationScenario) -> Unit,
     onShunt: (KnownDevice) -> Unit,
     onAdd: () -> Unit,
+    onDiagnostic: () -> Unit,
     onRemove: (DeviceId) -> Unit,
     backgroundOn: Boolean?,
     onBackground: (Boolean) -> Unit,
@@ -309,6 +313,7 @@ private fun DevicesScreen(
                 if (!isDemo) SecondaryButton("Retirer cet équipement", Modifier.fillMaxWidth()) { onRemove(device.deviceId) }
             }
         }
+        SecondaryButton("Diagnostic", Modifier.fillMaxWidth(), onDiagnostic)
         if (!isDemo && session.devices.isNotEmpty()) {
             Txt("Batterie JBD : connexion automatique, et reconnexion après une coupure. Victron : écoute des annonces, sans connexion.", 13.sp, color = p.muted)
         }
