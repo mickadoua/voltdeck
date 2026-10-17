@@ -25,7 +25,10 @@ sealed interface VictronDecodeResult {
     /** Trame trop courte pour son type : ignorée, à compter comme erreur de trame. */
     data object Truncated : VictronDecodeResult
 
-    /** L'octet de contrôle de l'annonce ne correspond pas à la clé : rien n'est déchiffré. */
+    /**
+     * Mauvaise clé : l'octet de contrôle ne correspond pas (rien n'est déchiffré), ou il correspond mais la charge
+     * utile déchiffrée est invraisemblable (coquille ailleurs que sur l'octet 0 de la clé). Aucune mesure n'est émise.
+     */
     data object WrongKey : VictronDecodeResult
 }
 
@@ -44,20 +47,24 @@ object VictronDecoder {
         if (header.keyCheckByte != key.checkByte) return VictronDecodeResult.WrongKey
         val plain = VictronCrypto.decryptFirstBlock(key, header.nonce, header.payload)
         return try {
-            VictronDecodeResult.Decoded(type, header.modelId, VictronRecords.decode(type, plain))
+            val samples = VictronRecords.decode(type, plain)
+            if (!VictronPlausibility.isPlausible(type, plain, samples)) return VictronDecodeResult.WrongKey
+            VictronDecodeResult.Decoded(type, header.modelId, samples)
         } finally {
             plain.fill(0)
         }
     }
 
     /**
-     * Vérifie une clé saisie contre une annonce déjà reçue, avant de l'enregistrer. Seul l'octet de contrôle est
-     * comparé : une mauvaise clé passe une fois sur 256 (limite du protocole, pas de la vérification).
+     * Vérifie une clé saisie contre une annonce déjà reçue, avant de l'enregistrer : octet de contrôle, puis
+     * déchiffrement d'essai et contrôle de vraisemblance (l'octet de contrôle seul laisse passer toute coquille
+     * hors de l'octet 0). Une mauvaise clé peut encore passer une fois sur plusieurs milliers : limite du protocole.
      */
-    fun checkKey(manufacturerData: ByteArray, key: VictronKey): KeyCheck {
-        if (!VictronHeader.isProductAdvertisement(manufacturerData)) return KeyCheck.NoUsableAdvertisement
-        val header = VictronHeader.parse(manufacturerData) ?: return KeyCheck.NoUsableAdvertisement
-        return if (header.keyCheckByte == key.checkByte) KeyCheck.Matches else KeyCheck.Mismatch
+    fun checkKey(manufacturerData: ByteArray, key: VictronKey): KeyCheck = when (decode(manufacturerData, key)) {
+        is VictronDecodeResult.Decoded -> KeyCheck.Matches
+        VictronDecodeResult.WrongKey -> KeyCheck.Mismatch
+        VictronDecodeResult.NotProductAdvertisement, VictronDecodeResult.Truncated, is VictronDecodeResult.UnsupportedRecord ->
+            KeyCheck.NoUsableAdvertisement
     }
 
     enum class KeyCheck { Matches, Mismatch, NoUsableAdvertisement }

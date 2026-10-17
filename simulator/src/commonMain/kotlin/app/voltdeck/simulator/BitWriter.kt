@@ -15,6 +15,13 @@ internal class BitWriter {
         }
     }
 
-    /** Octets écrits, complétés par des zéros jusqu'à [minBytes] au moins. */
-    fun toBytes(minBytes: Int): ByteArray = bytes.toByteArray().copyOf(maxOf(bytes.size, minBytes))
+    /**
+     * Octets écrits, complétés par des zéros jusqu'à [minBytes] au moins. Comme le prescrit le PDF Victron, les bits
+     * inutilisés du dernier octet écrit sont mis à 1.
+     */
+    fun toBytes(minBytes: Int): ByteArray {
+        val written = bytes.toByteArray()
+        if (bitCount % 8 != 0) written[written.size - 1] = (written.last().toInt() or (0xFF shl (bitCount % 8))).toByte()
+        return written.copyOf(maxOf(written.size, minBytes))
+    }
 }

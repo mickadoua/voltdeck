@@ -102,4 +102,16 @@ class VictronReferenceVectorsTest {
         val ok = VictronRecords.decode(VictronRecordType.BATTERY_MONITOR, hex("ffffe6040000feff020000000080fede"))
         assertEquals(382.19, ok.value(Metric.TEMPERATURE)!!, absoluteTolerance = 1e-9)
     }
+
+    @Test
+    fun auxMidpointAndStarterVoltageNotAvailableValuesAreAbsent() {
+        // Entrée auxiliaire 1 (point milieu) à 0xFFFF et 0 (tension) à 0x7FFF : hors plage publiée, donc NA.
+        val mid = VictronRecords.decode(VictronRecordType.BATTERY_MONITOR, hex("ffffe6040000ffff010000000080fede"))
+        assertNull(mid.value(Metric.MID_VOLTAGE))
+        assertNull(mid.value(Metric.AUX_VOLTAGE))
+
+        val starter = VictronRecords.decode(VictronRecordType.BATTERY_MONITOR, hex("ffffe6040000ff7f000000000080fede"))
+        assertNull(starter.value(Metric.AUX_VOLTAGE))
+        assertNull(starter.value(Metric.MID_VOLTAGE))
+    }
 }

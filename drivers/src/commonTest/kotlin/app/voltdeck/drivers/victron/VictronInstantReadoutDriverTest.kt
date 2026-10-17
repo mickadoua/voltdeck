@@ -31,14 +31,14 @@ import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-private class ScriptedTransport(private val advs: List<Adv>) : BleTransport {
+internal class ScriptedTransport(private val advs: List<Adv>) : BleTransport {
     override fun advertisements(filter: ScanFilter): Flow<Adv> = advs.filter { filter.matches(it) }.asFlow()
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink =
         error("Le pilote Victron ne se connecte jamais")
 }
 
-private object FixedClock : Clock {
+internal object FixedClock : Clock {
     override fun now(): Instant = Instant.fromEpochSeconds(1_000)
 }
 

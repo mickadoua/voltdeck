@@ -6,6 +6,8 @@ import app.voltdeck.core.DeviceId
 import app.voltdeck.core.Metric
 import app.voltdeck.core.Sample
 import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
+import app.voltdeck.drivers.victron.VictronKey
+import app.voltdeck.drivers.victron.VictronKeyStore
 import app.voltdeck.drivers.victron.VictronDecoder
 import app.voltdeck.drivers.victron.VictronRecordType
 import app.voltdeck.simulator.SimulatedVictron
@@ -93,5 +95,53 @@ class VictronKeyEntryTest {
         messages.forEach { message ->
             assertFalse(otherHex in message || goodHex in message || "zz" + goodHex.drop(2) in message)
         }
+    }
+
+    private val framesByType = mapOf(
+        VictronRecordType.SOLAR_CHARGER to listOf(
+            Sample(Metric.DEVICE_STATE, value = 3.0), Sample(Metric.ERROR_CODE, value = 0.0),
+            Sample(Metric.BATTERY_VOLTAGE, value = 13.4), Sample(Metric.BATTERY_CURRENT, value = 6.5),
+            Sample(Metric.PV_POWER, value = 120.0),
+        ),
+        VictronRecordType.BATTERY_MONITOR to listOf(
+            Sample(Metric.BATTERY_VOLTAGE, value = 12.5), Sample(Metric.BATTERY_CURRENT, value = -5.0),
+            Sample(Metric.SOC, value = 50.0), Sample(Metric.CONSUMED_AH, value = -50.0),
+        ),
+        VictronRecordType.DCDC_CONVERTER to listOf(
+            Sample(Metric.DEVICE_STATE, value = 3.0), Sample(Metric.ERROR_CODE, value = 0.0),
+            Sample(Metric.INPUT_VOLTAGE, value = 13.2), Sample(Metric.OUTPUT_VOLTAGE, value = 13.8),
+        ),
+    )
+
+    /** Coquille sur le dernier chiffre de l'octet [byteIndex] : l'octet 0 (contrôle) reste juste. */
+    private fun typo(hex: String, byteIndex: Int): String {
+        val at = 2 * byteIndex + 1
+        return hex.substring(0, at) + (if (hex[at] == '0') '1' else '0') + hex.substring(at + 1)
+    }
+
+    @Test
+    fun aTypoOnByte5_10_or15IsRefusedForEveryRecordTypeAndNeverSaved() {
+        for ((type, samples) in framesByType) {
+            val adv = VictronAdvertisementEncoder.encode(type, modelId = 0xA042, nonce = 7, key = goodKey, samples = samples)
+            assertEquals(KeyEntryOutcome.Saved, enterVictronKey(DeviceId("control-$type"), goodHex, adv, keys), "contrôle $type")
+            for (byteIndex in listOf(5, 10, 15)) {
+                val typed = typo(goodHex, byteIndex)
+                assertEquals(goodHex.take(2), typed.take(2))
+                assertEquals(VictronDecoder.WRONG_KEY_MESSAGE, rejected(typed, adv), "$type octet $byteIndex")
+                assertNull(keys.get(device))
+            }
+        }
+    }
+
+    @Test
+    fun aFailingVaultGivesARefusalNotAnException() {
+        val failing = object : VictronKeyStore {
+            override fun get(device: DeviceId): VictronKey? = null
+            override fun put(device: DeviceId, key: VictronKey) = error("Keystore indisponible")
+            override fun remove(device: DeviceId) = Unit
+        }
+        val outcome = enterVictronKey(device, goodHex, advertisement, failing)
+        assertEquals(KeyEntryOutcome.Rejected(KEY_SAVE_FAILED_MESSAGE), outcome)
+        assertFalse(goodHex in KEY_SAVE_FAILED_MESSAGE)
     }
 }
