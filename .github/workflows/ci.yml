@@ -42,14 +42,18 @@ jobs:
         run: ./gradlew check --stacktrace
       - name: APK debug
         run: ./gradlew :composeApp:assembleDebug --stacktrace
+      # Non bloquant : le quota d'artefacts du compte est atteint (calcul de facturation GitHub, VOL-4).
+      # L'APK debug est alors joint à la tâche depuis une build locale.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        continue-on-error: true
         with:
           name: voltdeck-debug-apk
           path: composeApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
+        continue-on-error: true
         with:
           name: test-reports
           path: "**/build/reports/"
