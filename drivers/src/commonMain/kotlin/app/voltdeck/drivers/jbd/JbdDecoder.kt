@@ -49,7 +49,7 @@ class JbdBasicInfo(
         add(Sample(Metric.CYCLES, value = cycles.toDouble()))
         if (socPercent in 0..100) add(Sample(Metric.SOC, value = socPercent.toDouble()))
         add(Sample(Metric.PROTECTION_FLAGS, value = protectionMask.toDouble()))
-        add(Sample(Metric.DEVICE_STATE, value = fetMask.toDouble()))
+        add(Sample(Metric.FET_STATE, value = fetMask.toDouble()))
         temperaturesC.forEachIndexed { channel, celsius ->
             if (celsius in MIN_TEMP_C..MAX_TEMP_C) add(Sample(Metric.TEMPERATURE, channel, celsius))
         }

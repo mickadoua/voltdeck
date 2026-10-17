@@ -449,9 +449,9 @@ class JbdDriverTest {
         val before = got.filter { it.at < start + 10.seconds }
         val after = got.filter { it.at >= start + 10.seconds }
         assertTrue(before.isNotEmpty() && after.isNotEmpty())
-        assertTrue(before.all { it.value(Metric.PROTECTION_FLAGS) == 0.0 && it.value(Metric.DEVICE_STATE) == 3.0 })
+        assertTrue(before.all { it.value(Metric.PROTECTION_FLAGS) == 0.0 && it.value(Metric.FET_STATE) == 3.0 })
         assertTrue(after.all { it.value(Metric.PROTECTION_FLAGS) == 1.0 })
-        assertTrue(after.all { it.value(Metric.DEVICE_STATE) == 2.0 })
+        assertTrue(after.all { it.value(Metric.FET_STATE) == 2.0 })
         assertTrue(after.all { it.value(Metric.CELL_VOLTAGE, 1)!! >= 3.65 })
     }
 

@@ -57,6 +57,12 @@ class JbdFramesTest {
     }
 
     @Test
+    fun bmsNeverEmitsTheChargerDeviceState() {
+        val data = JbdFrameAssembler().feed(basicFrame).single().data
+        assertTrue(JbdBasicInfo.decode(data).toSamples().none { it.metric == Metric.DEVICE_STATE })
+    }
+
+    @Test
     fun referenceBasicInfoFrameMapsToTheCommonMetrics() {
         val data = JbdFrameAssembler().feed(basicFrame).single().data
         val samples = JbdBasicInfo.decode(data).toSamples()
@@ -68,7 +74,7 @@ class JbdFramesTest {
         assertEquals(5.0, value(Metric.NOMINAL_CAPACITY))
         assertEquals(42.0, value(Metric.CYCLES))
         assertEquals(0.0, value(Metric.PROTECTION_FLAGS))
-        assertEquals(3.0, value(Metric.DEVICE_STATE))
+        assertEquals(3.0, value(Metric.FET_STATE))
         assertEquals(22.4, value(Metric.TEMPERATURE, 0))
         assertEquals(22.3, value(Metric.TEMPERATURE, 1))
         assertEquals(21.7, value(Metric.TEMPERATURE, 2))

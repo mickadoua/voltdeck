@@ -54,4 +54,16 @@ class DemoFormatTest {
         assertEquals("Décharge coupée", relayText(1))
         assertEquals("Charge et décharge coupées", relayText(0))
     }
+
+    @Test
+    fun fetStateIsShownAsRelayAndIgnoresReservedBits() {
+        assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 3.0)))
+        assertEquals("Charge et décharge coupées", sampleText(Sample(Metric.FET_STATE, value = 0.0)))
+        assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 0xFF.toDouble())))
+    }
+
+    @Test
+    fun chargerDeviceStateIsNotShownAsRelay() {
+        assertEquals("4.00 code", sampleText(Sample(Metric.DEVICE_STATE, value = 4.0)))
+    }
 }

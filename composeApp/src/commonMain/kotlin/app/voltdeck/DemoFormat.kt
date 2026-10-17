@@ -35,7 +35,7 @@ fun sampleLabel(sample: Sample): String = when (sample.metric) {
     Metric.TEMPERATURE -> "Température sonde ${sample.channel + 1}"
     Metric.CELL_VOLTAGE -> "Cellule ${sample.channel + 1}"
     Metric.PROTECTION_FLAGS -> "Alarmes"
-    Metric.DEVICE_STATE -> "Relais de la batterie"
+    Metric.FET_STATE -> "Relais de la batterie"
     else -> sample.metric.name
 }
 
@@ -76,7 +76,7 @@ private fun JbdProtectionFlag.frenchLabel(): String = when (this) {
 fun sampleText(sample: Sample): String {
     when (sample.metric) {
         Metric.PROTECTION_FLAGS -> return protectionText(sample.value.toInt())
-        Metric.DEVICE_STATE -> return relayText(sample.value.toInt())
+        Metric.FET_STATE -> return relayText(sample.value.toInt())
         else -> Unit
     }
     val decimals = when (sample.metric) {
