@@ -26,9 +26,10 @@ fun demoHistoryStart(until: Instant, zone: TimeZone, days: Int = DEMO_HISTORY_DA
     until.toLocalDateTime(zone).date.minus(days, DateTimeUnit.DAY).atStartOfDayIn(zone)
 
 /**
- * Remplit la base de démo de [demoHistoryStart] à [until] (heures, puis jours et mois), pour que les vues Semaine et Mois
- * aient de quoi montrer. Les équipements doivent déjà y être enregistrés depuis ce début. Une transaction par jour
- * simulé : la collecte en direct peut écrire entre deux, et une annulation n'abandonne que le jour en cours.
+ * Remplit la base de démo de [demoHistoryStart] à minuit du jour de [until] (heures, puis jours et mois), pour que les vues
+ * Semaine et Mois aient de quoi montrer. Le jour de [until] reste à la collecte en direct, sinon son total mélangerait les
+ * deux. Les équipements doivent déjà y être enregistrés depuis ce début. Une transaction par jour simulé : la collecte en
+ * direct peut écrire entre deux, et une annulation n'abandonne que le jour en cours.
  */
 suspend fun seedDemoHistory(db: VoltdeckDatabase, until: Instant, zone: TimeZone, days: Int = DEMO_HISTORY_DAYS) {
     if (days <= 0) return
@@ -36,8 +37,9 @@ suspend fun seedDemoHistory(db: VoltdeckDatabase, until: Instant, zone: TimeZone
     val plant = SimulatedPlant(DEMO_SEED, demoHistoryStart(until, zone, days), zone, ::demoWeather)
     val aggregator = MinuteAggregator(db, Level.HOUR)
     var at = demoHistoryStart(until, zone, days)
-    while (at < until) {
-        val dayEnd = minOf(at + 1.days, until)
+    val end = until.toLocalDateTime(zone).date.atStartOfDayIn(zone)
+    while (at < end) {
+        val dayEnd = minOf(at + 1.days, end)
         db.transaction {
             while (at < dayEnd) {
                 job.ensureActive()
