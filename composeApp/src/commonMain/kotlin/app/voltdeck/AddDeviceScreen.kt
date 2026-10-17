@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,7 +56,7 @@ fun AddDeviceScreen(session: LiveSession, bluetooth: BluetoothAccess, onBack: ()
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.foundation.Canvas(Modifier.sizeIn(minWidth = 18.dp, minHeight = 18.dp)) { LockIcon(p.ink2) }
+            androidx.compose.foundation.Canvas(Modifier.size(18.dp)) { LockIcon(p.ink2) }
             Txt("Voltdeck lit les équipements sans jamais rien y écrire.", 14.sp, color = p.ink2)
         }
 
