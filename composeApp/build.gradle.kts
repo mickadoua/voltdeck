@@ -53,6 +53,23 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+    // Clé de publication fournie par la CI (secrets du dépôt) : sans elle, l'APK release reste non signé.
+    val releaseKeystore = System.getenv("VOLTDECK_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("VOLTDECK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VOLTDECK_KEY_ALIAS")
+                keyPassword = System.getenv("VOLTDECK_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
