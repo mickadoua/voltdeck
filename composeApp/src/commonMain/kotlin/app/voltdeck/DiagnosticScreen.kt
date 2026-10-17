@@ -67,7 +67,7 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
             Line("Source", if (demo) "Simulateur (horloge ×${DEMO_SPEED.toInt()})" else "Équipements réels")
             Line("Base de données", if (database == null) "aucune" else if (demo) "démo, repart à zéro" else "réelle")
             Line("Dernière écriture", recorder.lastWrite?.let { ageText(now - it) } ?: "aucune")
-            Line("Minutes en attente", recorder.pending.toString())
+            Line("Cumuls en attente d'écriture", recorder.pending.toString())
             recorder.error?.let { Pill(it, Tone.CRIT) }
         }
 
