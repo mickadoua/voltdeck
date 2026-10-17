@@ -38,7 +38,7 @@ class EnergyHistory(
         val produced = chargers.map { rows(it.id, Metric.ENERGY_IN_WH) to rows(it.id, Metric.ENERGY_OUT_WH) }
         val flowIn = flow?.let { rows(it.id, Metric.ENERGY_IN_WH) }.orEmpty()
         val flowOut = flow?.let { rows(it.id, Metric.ENERGY_OUT_WH) }.orEmpty()
-        val starts = (produced.flatMap { it.first.keys } + flowIn.keys).toSortedSet()
+        val starts = (produced.flatMap { it.first.keys } + flowIn.keys).distinct().sorted()
 
         return starts.map { start ->
             val producedWh = if (chargers.isNotEmpty() && produced.all { start in it.first }) {
