@@ -1,0 +1,16 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# iOS / Xcode
+iosApp/build/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# Réglages locaux des outils d'agent : jamais dans le dépôt
+.claude/
