@@ -23,6 +23,7 @@ internal object VictronRecords {
         VictronRecordType.SOLAR_CHARGER -> solar(BitReader(payload))
         VictronRecordType.BATTERY_MONITOR -> batteryMonitor(BitReader(payload))
         VictronRecordType.DCDC_CONVERTER -> dcdc(BitReader(payload))
+        VictronRecordType.DC_ENERGY_METER -> dcEnergyMeter(BitReader(payload))
     }
 
     // PDF « Solar Charger » : état 32/8, erreur 40/8, V 48/16 s, I 64/16 s, rendement 80/16, PV 96/16, charge 112/9.
@@ -66,6 +67,22 @@ internal object VictronRecords {
         signedField(Metric.OUTPUT_VOLTAGE, r.unsigned(16), bits = 16, na = 0x7FFF, divisor = 100.0)
         // Le PDF ne définit pas de NA pour la raison d'arrêt (masque de bits).
         add(Sample(Metric.OFF_REASON, value = r.unsigned(32).toDouble()))
+    }
+
+    // PDF « DC Energy Meter » : type de compteur 32/16 s, V 48/16 s, alarme 64/16, aux 80/16, type aux 96/2, I 98/22 s.
+    // Même disposition que le moniteur de batterie jusqu'au courant ; vecteurs : keshavdv/victron-ble, test_dc_energy_meter.py.
+    private fun dcEnergyMeter(r: BitReader): List<Sample> = buildList {
+        add(Sample(Metric.METER_TYPE, value = BitReader.toSigned(r.unsigned(16), 16).toDouble()))
+        signedField(Metric.BATTERY_VOLTAGE, r.unsigned(16), bits = 16, na = 0x7FFF, divisor = 100.0)
+        add(Sample(Metric.ALARM_REASON, value = r.unsigned(16).toDouble()))
+        val aux = r.unsigned(16)
+        val auxInput = r.unsigned(2).toInt()
+        signedField(Metric.BATTERY_CURRENT, r.unsigned(22), bits = 22, na = 0x3FFFFF, divisor = 1000.0)
+        // Entrée auxiliaire : 0 tension de la batterie de démarrage, 2 température (centi-kelvins), 3 aucune.
+        when (auxInput) {
+            0 -> signedField(Metric.AUX_VOLTAGE, aux, bits = 16, na = 0x7FFF, divisor = 100.0)
+            2 -> if (aux != 0xFFFFL) add(Sample(Metric.TEMPERATURE, value = aux / 100.0 - KELVIN_OFFSET))
+        }
     }
 
     private const val KELVIN_OFFSET = 273.15

@@ -97,6 +97,23 @@ class SystemStatsTest {
     }
 
     @Test
+    fun aRecentDayWithOnlyHoursIsStillComputed() {
+        db.addDevice(MPPT, DeviceRole.SOLAR_CHARGER)
+        db.addDevice(BMS, DeviceRole.BATTERY)
+        db.feed(
+            from, to, 1.minutes,
+            mapOf(
+                MPPT to constant(Metric.BATTERY_VOLTAGE to 12.0, Metric.BATTERY_CURRENT to 5.0),
+                BMS to constant(Metric.BATTERY_VOLTAGE to 12.0, Metric.BATTERY_CURRENT to 3.0),
+            ),
+            Level.HOUR,
+        )
+        val result = stats.consumption(day, UTC, now)
+        assertEquals(48.0, result.value!!, 1e-6)
+        assertEquals(1.0, result.coverage)
+    }
+
+    @Test
     fun consumptionNeverUsesPvPower() {
         consumptionSetup()
         assertEquals(48.0, stats.consumption(day, UTC, now).value!!, 1e-6)

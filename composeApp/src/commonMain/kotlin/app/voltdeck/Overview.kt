@@ -47,8 +47,11 @@ data class BatteryTile(
 
 enum class AutonomyGap { CHARGING, NO_ESTIMATE }
 
-/** Autonomie lue sur un shunt de batterie (`TIME_TO_GO`), sinon la raison de son absence. */
-data class Autonomy(val minutes: Double?, val gap: AutonomyGap?)
+/**
+ * Autonomie lue sur un shunt de batterie (`TIME_TO_GO`), sinon estimée sur l'historique ([estimated]),
+ * sinon la raison de son absence.
+ */
+data class Autonomy(val minutes: Double?, val gap: AutonomyGap?, val estimated: Boolean = false)
 
 /** Consommation calculée = sources mesurées côté batterie − flux net de la batterie (VOL-1 §11.5). */
 data class Consumption(val watts: Double, val incomplete: Boolean)
@@ -69,6 +72,8 @@ fun buildOverview(
     devices: List<KnownDevice>,
     latest: Map<DeviceId, Reading>,
     setupOf: (DeviceId) -> ShuntSetup,
+    /** Estimation de [app.voltdeck.storage.SystemStats.autonomy] quand elle est de nature « estimée ». */
+    estimatedAutonomyHours: Double? = null,
 ): Overview {
     fun Reading.value(metric: Metric, channel: Int = 0) = samples.firstOrNull { it.metric == metric && it.channel == channel }?.value
     fun Reading.values(metric: Metric) = samples.filter { it.metric == metric }.map { it.value }
@@ -129,6 +134,7 @@ fun buildOverview(
     val autonomy = when {
         batteryShunt?.value(Metric.TIME_TO_GO) != null -> Autonomy(batteryShunt.value(Metric.TIME_TO_GO), null)
         battery?.trend == BatteryTrend.CHARGING -> Autonomy(null, AutonomyGap.CHARGING)
+        battery != null && estimatedAutonomyHours != null -> Autonomy(estimatedAutonomyHours * 60.0, null, estimated = true)
         else -> Autonomy(null, AutonomyGap.NO_ESTIMATE)
     }
 

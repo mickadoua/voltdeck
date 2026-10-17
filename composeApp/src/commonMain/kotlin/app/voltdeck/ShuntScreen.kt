@@ -70,6 +70,7 @@ fun placementEffect(setup: ShuntSetup): String = when (setup.placement) {
 fun ShuntScreen(
     title: String,
     status: VictronLinkStatus,
+    announced: ShuntSetup?,
     initial: ShuntSetup,
     onBack: () -> Unit,
     onSave: (ShuntSetup) -> Unit,
@@ -118,8 +119,13 @@ fun ShuntScreen(
 
         Card(Modifier.fillMaxWidth()) {
             Txt("Mode annoncé par le shunt", 13.sp, FontWeight.SemiBold, p.muted)
-            Txt("Moniteur de batterie", 17.sp, FontWeight.Bold)
-            Txt("Lu dans son annonce Bluetooth (enregistrement Victron 0x02). Il sert de choix par défaut.", 13.sp, color = p.ink2)
+            if (announced == null) {
+                Txt("Moniteur de batterie", 17.sp, FontWeight.Bold)
+                Txt("Lu dans son annonce Bluetooth (enregistrement Victron 0x02). Il sert de choix par défaut.", 13.sp, color = p.ink2)
+            } else {
+                Txt("Compteur DC · ${announced.displayName}", 17.sp, FontWeight.Bold)
+                Txt("Lu dans son annonce Bluetooth (enregistrement Victron 0x0D, réglé dans VictronConnect). Il sert de choix par défaut.", 13.sp, color = p.ink2)
+            }
         }
 
         Txt("Où est-il branché ?", 17.sp, FontWeight.Bold)

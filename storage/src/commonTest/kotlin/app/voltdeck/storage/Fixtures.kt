@@ -49,8 +49,9 @@ internal fun VoltdeckDatabase.feed(
     to: Instant,
     step: Duration,
     sources: Map<DeviceId, (Instant) -> Map<Metric, Double>?>,
+    bucket: Level = Level.MINUTE,
 ) {
-    val aggregator = MinuteAggregator(this)
+    val aggregator = MinuteAggregator(this, bucket)
     var t = from
     while (t <= to) {
         for ((id, source) in sources) {

@@ -3,6 +3,10 @@ SELECT * FROM agg_hour
 WHERE device_id = ? AND metric = ? AND channel = ? AND bucket_start >= ? AND bucket_start < ?
 ORDER BY bucket_start;
 
+selectHourOne:
+SELECT * FROM agg_hour
+WHERE device_id = ? AND metric = ? AND channel = ? AND bucket_start = ?;
+
 -- Recalcul de plages d'heures depuis les minutes (idempotent : INSERT OR REPLACE).
 rollupHours:
 INSERT OR REPLACE INTO agg_hour(device_id, metric, channel, bucket_start, count, min, max, sum, last)

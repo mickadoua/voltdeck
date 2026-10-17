@@ -11,6 +11,7 @@ import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.Candidate
 import app.voltdeck.drivers.KnownDevice
+import app.voltdeck.drivers.jbd.JbdCounters
 import app.voltdeck.drivers.jbd.JbdDriver
 import app.voltdeck.drivers.jbd.JbdIdentityException
 import app.voltdeck.drivers.victron.CachingVictronKeyStore
@@ -41,6 +42,15 @@ import kotlin.uuid.Uuid
 interface Session {
     val devices: List<KnownDevice>
     val linkStatus: StateFlow<Map<DeviceId, VictronLinkStatus>>
+
+    /** Horloge des mesures : simulée et accélérée en démo. */
+    val clock: Clock
+    val jbdCounters: StateFlow<Map<DeviceId, JbdCounters>>
+    val truncatedVictronFrames: Int
+    val scanError: StateFlow<String?>
+
+    /** Équipements à déclarer en base avant d'y écrire leurs mesures. */
+    fun records(): List<RegisteredDevice>
 
     fun readings(): Flow<Reading>
 
@@ -93,7 +103,7 @@ class LiveSession(
     keys: VictronKeyStore,
     private val registry: DeviceRegistry,
     scope: CoroutineScope,
-    clock: Clock = Clock.System,
+    override val clock: Clock = Clock.System,
 ) : Session {
     private val shared = SharedScanTransport(transport, scope)
     private val scan = RecordingTransport(shared)
@@ -101,7 +111,13 @@ class LiveSession(
     private val victron = VictronInstantReadoutDriver(this.keys, clock)
     private val jbd = JbdDriver(clock)
 
-    val scanError: StateFlow<String?> get() = shared.scanError
+    override val scanError: StateFlow<String?> get() = shared.scanError
+
+    override val jbdCounters: StateFlow<Map<DeviceId, JbdCounters>> get() = jbd.counters
+
+    override val truncatedVictronFrames: Int get() = victron.diagnostics.truncatedFrames
+
+    override fun records(): List<RegisteredDevice> = registered
 
     val registered: List<RegisteredDevice> get() = registry.all()
 

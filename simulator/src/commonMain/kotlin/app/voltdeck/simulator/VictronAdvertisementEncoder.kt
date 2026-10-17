@@ -70,6 +70,14 @@ object VictronAdvertisementEncoder {
                 w.put(signed(v[Metric.OUTPUT_VOLTAGE], 16, 100.0), 16)
                 w.put((v[Metric.OFF_REASON] ?: 0.0).roundToLong(), 32)
             }
+            VictronRecordType.DC_ENERGY_METER -> {
+                w.put((v[Metric.METER_TYPE] ?: 1.0).roundToLong() and 0xFFFF, 16)
+                w.put(signed(v[Metric.BATTERY_VOLTAGE], 16, 100.0), 16)
+                w.put((v[Metric.ALARM_REASON] ?: 0.0).roundToLong(), 16)
+                w.put(0xFFFFL, 16)
+                w.put(AUX_NONE, 2)
+                w.put(signed(v[Metric.BATTERY_CURRENT], 22, 1000.0), 22)
+            }
         }
         return w.toBytes(type.minPayloadBytes)
     }

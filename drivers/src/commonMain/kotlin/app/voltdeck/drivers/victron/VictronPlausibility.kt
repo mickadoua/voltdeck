@@ -31,7 +31,7 @@ internal object VictronPlausibility {
         val range = when (type) {
             VictronRecordType.SOLAR_CHARGER -> 89 until 96 // bits PDF 121..127, charge utile = bit PDF − 32
             VictronRecordType.BATTERY_MONITOR -> 118 until 120 // bits PDF 150..151
-            VictronRecordType.DCDC_CONVERTER -> return true // 80 bits : l'octet est plein
+            VictronRecordType.DCDC_CONVERTER, VictronRecordType.DC_ENERGY_METER -> return true // 80 et 88 bits : l'octet est plein
         }
         return range.all { bit -> (plain[bit shr 3].toInt() shr (bit and 7)) and 1 == 1 }
     }
@@ -48,11 +48,13 @@ internal object VictronPlausibility {
             Metric.PV_POWER -> v in 0.0..MAX_PV_WATTS
             Metric.TEMPERATURE -> v in -60.0..150.0
             Metric.CONSUMED_AH -> v in -MAX_CONSUMED_AH..0.0
+            Metric.METER_TYPE -> v in -MAX_METER_TYPE..MAX_METER_TYPE && v != 0.0
             else -> true
         }
     }
 
-    private fun currentLimit(type: VictronRecordType) = if (type == VictronRecordType.BATTERY_MONITOR) MAX_SHUNT_AMPS else MAX_CHARGER_AMPS
+    private fun currentLimit(type: VictronRecordType) =
+        if (type == VictronRecordType.BATTERY_MONITOR || type == VictronRecordType.DC_ENERGY_METER) MAX_SHUNT_AMPS else MAX_CHARGER_AMPS
 
     private const val MAX_VOLTS = 70.0
     private const val MAX_INPUT_VOLTS = 100.0
@@ -60,4 +62,7 @@ internal object VictronPlausibility {
     private const val MAX_SHUNT_AMPS = 2000.0
     private const val MAX_PV_WATTS = 20000.0
     private const val MAX_CONSUMED_AH = 10000.0
+
+    /** Types connus : −9 à 8. Marge pour ceux que Victron ajouterait, sans accepter n'importe quel entier 16 bits. */
+    private const val MAX_METER_TYPE = 32.0
 }

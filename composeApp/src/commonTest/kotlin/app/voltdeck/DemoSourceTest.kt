@@ -43,11 +43,11 @@ class DemoSourceTest {
     }
 
     @Test
-    fun batteryReadingsAreOneSimulatedMinuteApart() = runTest {
+    fun batteryReadingsAreHalfASimulatedMinuteApart() = runTest {
         val got = demoReadings(realClock(), TimeZone.UTC).take(8).toList()
         assertEquals(setOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID, SimulatedPlant.SHUNT_ID), got.map { it.deviceId }.toSet())
         val batteries = got.filter { it.deviceId == SimulatedPlant.BATTERY_ID }
-        assertEquals(1.seconds * DEMO_SPEED.toInt(), batteries[1].at - batteries[0].at)
+        assertEquals(DEMO_PERIOD * DEMO_SPEED, batteries[1].at - batteries[0].at)
         assertTrue(batteries[0].at == Instant.parse("2026-10-16T06:30:00Z"))
     }
 

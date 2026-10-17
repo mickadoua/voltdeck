@@ -25,6 +25,7 @@ kotlin {
             implementation(project(":ble"))
             implementation(project(":drivers"))
             implementation(project(":simulator"))
+            implementation(project(":storage"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
@@ -35,6 +36,9 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+        }
+        getByName("androidUnitTest").dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
         }
     }
 }
@@ -48,6 +52,23 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+    }
+    // Clé de publication fournie par la CI (secrets du dépôt) : sans elle, l'APK release reste non signé.
+    val releaseKeystore = System.getenv("VOLTDECK_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("VOLTDECK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VOLTDECK_KEY_ALIAS")
+                keyPassword = System.getenv("VOLTDECK_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

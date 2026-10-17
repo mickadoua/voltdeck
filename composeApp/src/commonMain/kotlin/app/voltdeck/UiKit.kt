@@ -271,6 +271,12 @@ val BackIcon: DrawScope.(Color) -> Unit = { c ->
     drawLine(c, Offset(size.width * 0.32f, size.height * 0.5f), Offset(size.width * 0.62f, size.height * 0.8f), s, StrokeCap.Round)
 }
 
+val ForwardIcon: DrawScope.(Color) -> Unit = { c ->
+    val s = stroke(c).width
+    drawLine(c, Offset(size.width * 0.38f, size.height * 0.2f), Offset(size.width * 0.68f, size.height * 0.5f), s, StrokeCap.Round)
+    drawLine(c, Offset(size.width * 0.68f, size.height * 0.5f), Offset(size.width * 0.38f, size.height * 0.8f), s, StrokeCap.Round)
+}
+
 val LockIcon: DrawScope.(Color) -> Unit = { c ->
     val s = stroke(c)
     drawRoundRect(c, Offset(size.width * 0.2f, size.height * 0.45f), Size(size.width * 0.6f, size.height * 0.45f), CornerRadius(size.width * 0.08f), style = s)

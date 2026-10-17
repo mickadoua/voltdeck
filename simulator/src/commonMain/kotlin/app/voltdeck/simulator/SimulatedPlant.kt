@@ -7,6 +7,7 @@ import app.voltdeck.core.Sample
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.PI
@@ -25,10 +26,11 @@ import kotlin.time.Instant
 /**
  * Modèle physique minimal et déterministe d'un système 12 V : un MPPT, une batterie LiFePO4 4S de 200 Ah, un
  * SmartShunt sur cette batterie et une consommation (base + frigo par cycles). Les mesures sont des valeurs synthétiques : aucune ne
- * vient du matériel du fondateur.
+ * vient d'un matériel réel.
  *
  * Déterminisme : mêmes `seed`, `start` et `zone`, et mêmes instants demandés => mêmes [Reading]. Le bruit est
  * une fonction pure de (graine, canal, seconde). L'état de charge est intégré par pas d'une minute simulée.
+ * [weather] : part du rayonnement reçue chaque jour, 1 = ciel clair.
  * Non thread-safe : un seul consommateur à la fois.
  *
  * Les [Reading] sont les valeurs « vraies » du modèle ; [SimulatedTransport] les encode en annonces Victron chiffrées.
@@ -38,6 +40,7 @@ class SimulatedPlant(
     private val seed: Long,
     start: Instant,
     private val zone: TimeZone = TimeZone.UTC,
+    private val weather: (LocalDate) -> Double = { 1.0 },
 ) {
     private var simulatedUntil: Instant = start
     private var soc = INITIAL_SOC
@@ -99,7 +102,7 @@ class SimulatedPlant(
         if (hour <= SUNRISE || hour >= SUNSET) return 0.0
         val bell = sin(PI * (hour - SUNRISE) / (SUNSET - SUNRISE)).pow(1.3)
         val cloud = 1.0 - 0.65 * exp(-((hour - CLOUD_HOUR) / 0.4).pow(2))
-        return PEAK_WATTS * bell * cloud * (1.0 + 0.03 * noise(CH_PV, t))
+        return PEAK_WATTS * bell * cloud * weather(t.toLocalDateTime(zone).date) * (1.0 + 0.03 * noise(CH_PV, t))
     }
 
     private fun loadAmps(t: Instant): Double {
