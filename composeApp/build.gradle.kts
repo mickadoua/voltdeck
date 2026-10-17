@@ -29,6 +29,7 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
+            implementation(libs.vico.compose)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
