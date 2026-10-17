@@ -26,6 +26,7 @@ Les équipements Victron ne sont jamais connectés : leurs mesures se lisent par
 | `ble/` | Contrats `BleTransport` / `ReadOnlyGattLink`, liste blanche, `KableTransport` (Kable 0.45) |
 | `drivers/` | Pilotes d'équipements (vide pour l'instant) |
 | `simulator/` | `SimulatedTransport` déterministe (horloge injectée, graine fixe) : une batterie, un MPPT |
+| `storage/` | Stockage local SQLDelight : agrégats minute / heure / jour / mois, roll-up idempotent, rétention des minutes (30 jours), `SystemStats` (production, consommation, autonomie, cycles). Mode démo dans un fichier séparé (`voltdeck-demo.db`) |
 | `composeApp/` | Application Compose Multiplatform (Android + iOS), écran « Mode démo » |
 | `iosApp/` | Coque Xcode iOS |
 | `scripts/ci/` | Contrôles de la CI (lecture seule, anti-secret, auto-test des contrôles) |

@@ -1,0 +1,40 @@
+selectMinute:
+SELECT * FROM agg_minute
+WHERE device_id = ? AND metric = ? AND channel = ? AND bucket_start >= ? AND bucket_start < ?
+ORDER BY bucket_start;
+
+selectMinuteOne:
+SELECT * FROM agg_minute
+WHERE device_id = ? AND metric = ? AND channel = ? AND bucket_start = ?;
+
+upsertMinute:
+INSERT OR REPLACE INTO agg_minute(device_id, metric, channel, bucket_start, count, min, max, sum, last)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Minutes d'une plage regroupées par heure (vue « heure » des heures pas encore consolidées).
+selectMinutesAsHours:
+SELECT g.hour_start, g.count, g.min, g.max, g.sum,
+       (SELECT x.last FROM agg_minute x
+         WHERE x.device_id = ?1 AND x.metric = ?2 AND x.channel = ?3
+           AND x.bucket_start >= g.hour_start AND x.bucket_start < g.hour_start + 3600
+         ORDER BY x.bucket_start DESC LIMIT 1) AS last
+FROM (
+  SELECT bucket_start / 3600 * 3600 AS hour_start,
+         SUM(count) AS count, MIN(min) AS min, MAX(max) AS max, SUM(sum) AS sum
+  FROM agg_minute
+  WHERE device_id = ?1 AND metric = ?2 AND channel = ?3 AND bucket_start >= ?4 AND bucket_start < ?5
+  GROUP BY hour_start
+) g
+ORDER BY g.hour_start;
+
+minuteBounds:
+SELECT MIN(bucket_start) AS first_bucket, MAX(bucket_start) AS last_bucket FROM agg_minute;
+
+deleteMinutesBefore:
+DELETE FROM agg_minute WHERE bucket_start < ?;
+
+countMinutes:
+SELECT COUNT(*) FROM agg_minute;
+
+selectLatestMinute:
+SELECT * FROM agg_minute WHERE device_id = ? AND metric = ? AND channel = ? ORDER BY bucket_start DESC LIMIT 1;
