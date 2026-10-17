@@ -34,7 +34,7 @@ class VictronKeyEntryTest {
         samples = listOf(Sample(Metric.PV_POWER, value = 100.0)),
     )
 
-    private fun rejected(text: String, adv: ByteArray? = advertisement): String {
+    private fun rejected(text: String, adv: List<ByteArray> = listOf(advertisement)): String {
         val outcome = enterVictronKey(device, text, adv, keys)
         assertTrue(outcome is KeyEntryOutcome.Rejected, "attendu : refus, obtenu $outcome")
         return outcome.message
@@ -42,13 +42,13 @@ class VictronKeyEntryTest {
 
     @Test
     fun theMatchingKeyIsSaved() {
-        assertEquals(KeyEntryOutcome.Saved, enterVictronKey(device, goodHex, advertisement, keys))
+        assertEquals(KeyEntryOutcome.Saved, enterVictronKey(device, goodHex, listOf(advertisement), keys))
         assertEquals(goodKey, keys.get(device))
     }
 
     @Test
     fun surroundingSpacesAndUpperCaseAreAccepted() {
-        assertEquals(KeyEntryOutcome.Saved, enterVictronKey(device, "  ${goodHex.uppercase()}\n", advertisement, keys))
+        assertEquals(KeyEntryOutcome.Saved, enterVictronKey(device, "  ${goodHex.uppercase()}\n", listOf(advertisement), keys))
     }
 
     @Test
@@ -66,21 +66,21 @@ class VictronKeyEntryTest {
 
     @Test
     fun badFormatIsRefusedBeforeLookingAtAnyAdvertisement() {
-        assertEquals(KEY_FORMAT_MESSAGE, rejected(goodHex.dropLast(1), adv = null))
-        assertEquals(KEY_FORMAT_MESSAGE, rejected("", adv = null))
-        assertEquals(KEY_NOT_HEX_MESSAGE, rejected("zz" + goodHex.drop(2), adv = null))
+        assertEquals(KEY_FORMAT_MESSAGE, rejected(goodHex.dropLast(1), adv = emptyList()))
+        assertEquals(KEY_FORMAT_MESSAGE, rejected("", adv = emptyList()))
+        assertEquals(KEY_NOT_HEX_MESSAGE, rejected("zz" + goodHex.drop(2), adv = emptyList()))
         assertNull(keys.get(device))
     }
 
     @Test
     fun withoutAnAdvertisementTheKeyCannotBeVerifiedAndIsNotSaved() {
-        assertEquals(KEY_UNVERIFIABLE_MESSAGE, rejected(goodHex, adv = null))
+        assertEquals(KEY_UNVERIFIABLE_MESSAGE, rejected(goodHex, adv = emptyList()))
         assertNull(keys.get(device))
     }
 
     @Test
     fun anAdvertisementThatIsNotAProductAdvertisementCannotVerifyAKey() {
-        assertEquals(KEY_UNVERIFIABLE_MESSAGE, rejected(goodHex, adv = byteArrayOf(0x07, 0x00)))
+        assertEquals(KEY_UNVERIFIABLE_MESSAGE, rejected(goodHex, adv = listOf(byteArrayOf(0x07, 0x00))))
         assertNull(keys.get(device))
     }
 
@@ -90,7 +90,7 @@ class VictronKeyEntryTest {
             rejected(otherHex),
             rejected(goodHex.dropLast(1)),
             rejected("zz" + goodHex.drop(2)),
-            rejected(goodHex, adv = null),
+            rejected(goodHex, adv = emptyList()),
         )
         messages.forEach { message ->
             assertFalse(otherHex in message || goodHex in message || "zz" + goodHex.drop(2) in message)
@@ -123,11 +123,11 @@ class VictronKeyEntryTest {
     fun aTypoOnByte5_10_or15IsRefusedForEveryRecordTypeAndNeverSaved() {
         for ((type, samples) in framesByType) {
             val adv = VictronAdvertisementEncoder.encode(type, modelId = 0xA042, nonce = 7, key = goodKey, samples = samples)
-            assertEquals(KeyEntryOutcome.Saved, enterVictronKey(DeviceId("control-$type"), goodHex, adv, keys), "contrôle $type")
+            assertEquals(KeyEntryOutcome.Saved, enterVictronKey(DeviceId("control-$type"), goodHex, listOf(adv), keys), "contrôle $type")
             for (byteIndex in listOf(5, 10, 15)) {
                 val typed = typo(goodHex, byteIndex)
                 assertEquals(goodHex.take(2), typed.take(2))
-                assertEquals(VictronDecoder.WRONG_KEY_MESSAGE, rejected(typed, adv), "$type octet $byteIndex")
+                assertEquals(VictronDecoder.WRONG_KEY_MESSAGE, rejected(typed, listOf(adv)), "$type octet $byteIndex")
                 assertNull(keys.get(device))
             }
         }
@@ -140,7 +140,7 @@ class VictronKeyEntryTest {
             override fun put(device: DeviceId, key: VictronKey) = error("Keystore indisponible")
             override fun remove(device: DeviceId) = Unit
         }
-        val outcome = enterVictronKey(device, goodHex, advertisement, failing)
+        val outcome = enterVictronKey(device, goodHex, listOf(advertisement), failing)
         assertEquals(KeyEntryOutcome.Rejected(KEY_SAVE_FAILED_MESSAGE), outcome)
         assertFalse(goodHex in KEY_SAVE_FAILED_MESSAGE)
     }

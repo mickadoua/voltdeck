@@ -7,6 +7,7 @@ import app.voltdeck.core.Metric
 import app.voltdeck.core.Reading
 import app.voltdeck.core.Sample
 import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
+import app.voltdeck.drivers.victron.VictronInstantReadoutDriver
 import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.simulator.SimulatedPlant
 import app.voltdeck.simulator.SimulatedVictron
@@ -51,8 +52,8 @@ class DemoSessionTest {
 
         val mppt = got.filter { it.deviceId == SimulatedPlant.MPPT_ID }
         val shunt = got.filter { it.deviceId == SimulatedPlant.SHUNT_ID }
-        assertEquals(420, mppt.size)
-        assertEquals(420, shunt.size)
+        assertTrue(mppt.size >= 420 - VictronInstantReadoutDriver.PLAUSIBLE_STREAK, "${mppt.size} lectures MPPT")
+        assertTrue(shunt.size >= 420 - VictronInstantReadoutDriver.PLAUSIBLE_STREAK, "${shunt.size} lectures shunt")
         assertTrue(mppt.any { it.samples.value(Metric.PV_POWER) > 100.0 }, "du soleil doit apparaître avant 13 h simulées")
         (mppt + shunt).sortedBy { it.at }.forEach { r ->
             val model = truth.getOrPut(r.at) { truthPlant.readingsAt(r.at) }

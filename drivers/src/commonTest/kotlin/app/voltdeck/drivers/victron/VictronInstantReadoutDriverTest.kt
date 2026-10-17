@@ -56,7 +56,7 @@ class VictronInstantReadoutDriverTest {
         val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
         val other = PlatformDeviceId("test-other")
         val transport = ScriptedTransport(
-            listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV), other), adv(hex(Vectors.BATTERY_MONITOR_ADV))),
+            listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV), other)) + shuntFrames(VictronInstantReadoutDriver.PLAUSIBLE_STREAK).map { adv(it) },
         )
         val d = driver(keys)
         val readings = d.readings(shunt, transport).toList()
@@ -90,11 +90,11 @@ class VictronInstantReadoutDriverTest {
         val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
         val good = hex(Vectors.BATTERY_MONITOR_ADV)
         val transport = ScriptedTransport(
-            listOf(adv(good.copyOf(5)), adv(good.copyOf(good.size - 1)), adv(good), adv(good.copyOf(12))),
+            listOf(adv(good.copyOf(5)), adv(good.copyOf(good.size - 1))) + shuntFrames(VictronInstantReadoutDriver.PLAUSIBLE_STREAK).map { adv(it) } + adv(good.copyOf(12)),
         )
         val d = driver(keys)
         val readings = d.readings(shunt, transport).toList()
-        assertEquals(1, readings.size, "seule la trame complète est décodée")
+        assertEquals(1, readings.size, "seules les trames complètes comptent, et la clé n'est bonne qu'à la troisième")
         assertEquals(3, d.diagnostics.truncatedFrames)
         assertEquals(VictronLinkStatus.OK, d.diagnostics.status.value[shunt.deviceId])
     }
@@ -138,5 +138,26 @@ class VictronInstantReadoutDriverTest {
         val transport = ScriptedTransport(emptyList())
         assertFailsWith<IllegalStateException> { transport.connect(platformId, GattProfile.Jbd) }
         assertEquals("victron.ir", driver(InMemoryVictronKeyStore()).driverId)
+    }
+
+    @Test
+    fun theKeyIsTrustedOnlyAfterSeveralDistinctPlausibleFrames() = runTest {
+        val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
+        val frames = shuntFrames(4)
+        val d = driver(keys)
+        val repeated = d.readings(shunt, ScriptedTransport(List(10) { adv(frames[0]) })).toList()
+        assertEquals(emptyList(), repeated, "la même trame répétée ne prouve rien")
+        assertEquals(null, d.diagnostics.status.value[shunt.deviceId])
+        val distinct = driver(keys).readings(shunt, ScriptedTransport(frames.map { adv(it) })).toList()
+        assertEquals(frames.size - VictronInstantReadoutDriver.PLAUSIBLE_STREAK + 1, distinct.size)
+    }
+
+    @Test
+    fun aRejectedFrameResetsTheStreak() = runTest {
+        val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
+        val f = shuntFrames(4)
+        val bad = f[0].copyOf().also { it[7] = (it[7].toInt() xor 0xFF).toByte() }
+        val readings = driver(keys).readings(shunt, ScriptedTransport(listOf(f[0], f[1], bad, f[2], f[3]).map { adv(it) })).toList()
+        assertEquals(emptyList(), readings)
     }
 }

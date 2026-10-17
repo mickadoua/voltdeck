@@ -1,8 +1,7 @@
 /*
  * Source du format : Victron Energy, « Extra manufacturer Data », version imprimée le 2022-12-14,
  * https://communityarchive.victronenergy.com/storage/attachments/extra-manufacturer-data-2022-12-14.pdf
- * Codes d'état et d'erreur : Victron, « VE.Direct Protocol » (tables CS et ERR), registres VE_REG_DEVICE_STATE et
- * VE_REG_CHR_ERROR_CODE cités par le PDF. Aucun code d'esphome-victron_ble (GPL-3.0) ni victron-hacs (sans licence).
+ * Aucun code d'esphome-victron_ble (GPL-3.0) ni victron-hacs (sans licence).
  */
 
 package app.voltdeck.drivers.victron
@@ -16,6 +15,8 @@ import app.voltdeck.core.Sample
  * contrôle est traitée comme une mauvaise clé : aucune mesure n'est émise.
  *
  * Les bornes sont larges (matériel réel 12/24/48 V) : elles écartent le bruit, pas les valeurs rares mais légitimes.
+ * L'état et le code d'erreur ne sont pas contrôlés : Victron en ajoute au fil des versions, et une liste fermée
+ * refusait de vraies trames avec la bonne clé (VOL-15).
  */
 internal object VictronPlausibility {
     fun isPlausible(type: VictronRecordType, plain: ByteArray, samples: List<Sample>): Boolean =
@@ -46,8 +47,7 @@ internal object VictronPlausibility {
                 v in -currentLimit(type)..currentLimit(type)
             Metric.PV_POWER -> v in 0.0..MAX_PV_WATTS
             Metric.TEMPERATURE -> v in -60.0..150.0
-            Metric.DEVICE_STATE -> v.toInt() in DEVICE_STATES
-            Metric.ERROR_CODE -> v.toInt() in CHARGER_ERRORS
+            Metric.CONSUMED_AH -> v in -MAX_CONSUMED_AH..0.0
             else -> true
         }
     }
@@ -59,10 +59,5 @@ internal object VictronPlausibility {
     private const val MAX_CHARGER_AMPS = 500.0
     private const val MAX_SHUNT_AMPS = 2000.0
     private const val MAX_PV_WATTS = 20000.0
-
-    /** Off, low power, fault, bulk, absorption, float, storage, equalize, inverting, power supply, starting up, repeated absorption, auto equalize, BatterySafe, external control. */
-    private val DEVICE_STATES = setOf(0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 245, 246, 247, 248, 252)
-
-    private val CHARGER_ERRORS: Set<Int> =
-        listOf(0..8, 17..21, 26..29, 33..35, 38..39, 65..68, 200..203).flatten().toSet() + setOf(114, 116, 117, 119, 121)
+    private const val MAX_CONSUMED_AH = 10000.0
 }

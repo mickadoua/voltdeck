@@ -21,14 +21,14 @@ const val KEY_UNVERIFIABLE_MESSAGE =
     "Aucune annonce reçue de cet appareil : la clé ne peut pas être vérifiée. Rapprochez-vous de l'appareil et réessayez."
 
 /**
- * Saisie d'une clé d'annonce Victron : format (32 hexadécimaux), puis déchiffrement d'essai de la dernière annonce
- * reçue de l'appareil ([latestAdvertisement], donnée constructeur Victron) avec contrôle de vraisemblance, et seulement alors enregistrement dans [keys] (un échec du coffre donne un refus, jamais une exception).
+ * Saisie d'une clé d'annonce Victron : format (32 hexadécimaux), puis déchiffrement d'essai des dernières annonces
+ * distinctes reçues de l'appareil ([recentAdvertisements], données constructeur Victron) avec contrôle de vraisemblance, et seulement alors enregistrement dans [keys] (un échec du coffre donne un refus, jamais une exception).
  * La clé saisie n'est ni répétée dans un message ni journalisée.
  */
 fun enterVictronKey(
     device: DeviceId,
     text: String,
-    latestAdvertisement: ByteArray?,
+    recentAdvertisements: List<ByteArray>,
     keys: VictronKeyStore,
 ): KeyEntryOutcome {
     val key = when (val parsed = VictronKey.parse(text)) {
@@ -37,8 +37,8 @@ fun enterVictronKey(
         )
         is KeyParse.Valid -> parsed.key
     }
-    if (latestAdvertisement == null) return KeyEntryOutcome.Rejected(KEY_UNVERIFIABLE_MESSAGE)
-    return when (VictronDecoder.checkKey(latestAdvertisement, key)) {
+    if (recentAdvertisements.isEmpty()) return KeyEntryOutcome.Rejected(KEY_UNVERIFIABLE_MESSAGE)
+    return when (VictronDecoder.checkKey(recentAdvertisements, key)) {
         VictronDecoder.KeyCheck.Matches -> {
             try {
                 keys.put(device, key)
