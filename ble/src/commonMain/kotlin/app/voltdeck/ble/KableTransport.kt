@@ -28,11 +28,13 @@ class KableTransport : BleTransport {
 
     override fun advertisements(filter: ScanFilter): Flow<Adv> {
         val scanner = Scanner {
-            filters {
-                match {
-                    filter.serviceUuid?.let { services = listOf(Uuid.parse(it)) }
-                    filter.companyId?.let { manufacturerData = listOf(Filter.ManufacturerData(it)) }
-                    filter.namePrefix?.let { name = Filter.Name.Prefix(it) }
+            if (filter != ScanFilter.Any) {
+                filters {
+                    match {
+                        filter.serviceUuid?.let { services = listOf(Uuid.parse(it)) }
+                        filter.companyId?.let { manufacturerData = listOf(Filter.ManufacturerData(it)) }
+                        filter.namePrefix?.let { name = Filter.Name.Prefix(it) }
+                    }
                 }
             }
         }

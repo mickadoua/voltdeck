@@ -63,8 +63,6 @@ internal object VictronPlausibility {
     /** Off, low power, fault, bulk, absorption, float, storage, equalize, inverting, power supply, starting up, repeated absorption, auto equalize, BatterySafe, external control. */
     private val DEVICE_STATES = setOf(0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 245, 246, 247, 248, 252)
 
-    private val CHARGER_ERRORS = setOf(
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 26, 27, 28, 29, 33, 34, 35, 38, 39, 65, 66, 67, 68,
-        114, 116, 117, 119, 121, 200, 201, 202, 203,
-    )
+    private val CHARGER_ERRORS: Set<Int> =
+        listOf(0..8, 17..21, 26..29, 33..35, 38..39, 65..68, 200..203).flatten().toSet() + setOf(114, 116, 117, 119, 121)
 }

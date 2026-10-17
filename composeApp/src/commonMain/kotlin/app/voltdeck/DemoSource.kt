@@ -7,6 +7,7 @@ import app.voltdeck.ble.GattProfile
 import app.voltdeck.ble.PlatformDeviceId
 import app.voltdeck.ble.ReadOnlyGattLink
 import app.voltdeck.ble.ScanFilter
+import app.voltdeck.core.DeviceId
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.KnownDevice
@@ -15,6 +16,7 @@ import app.voltdeck.drivers.victron.CachingVictronKeyStore
 import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
 import app.voltdeck.drivers.victron.VictronInstantReadoutDriver
 import app.voltdeck.drivers.victron.VictronKeyStore
+import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.simulator.AcceleratedClock
 import app.voltdeck.simulator.JbdScenario
 import app.voltdeck.simulator.SimulatedPlant
@@ -22,6 +24,7 @@ import app.voltdeck.simulator.SimulatedTransport
 import app.voltdeck.simulator.SimulatedVictron
 import app.voltdeck.simulator.SimulationScenario
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.datetime.TimeZone
@@ -69,7 +72,7 @@ class DemoSession(
     real: Clock = Clock.System,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     jbdScenario: JbdScenario = JbdScenario.Nominal,
-) {
+) : Session {
     /** Coffre mis en cache : le pilote lit la clé à chaque annonce, sans relire le Keystore/Keychain. */
     val keys: VictronKeyStore = CachingVictronKeyStore(keys)
 
@@ -86,6 +89,12 @@ class DemoSession(
     val shunt = KnownDevice(SimulatedPlant.SHUNT_ID, SimulatedTransport.SHUNT_ID, DeviceRole.SHUNT)
     val victronDevices = listOf(mppt, shunt)
 
+    override val devices: List<KnownDevice> = listOf(battery) + victronDevices
+
+    override val linkStatus: StateFlow<Map<DeviceId, VictronLinkStatus>> get() = driver.diagnostics.status
+
+    override fun title(id: DeviceId): String = deviceTitle(id)
+
     init {
         victronDevices.forEach { keys.put(it.deviceId, SimulatedVictron.TEST_KEY) }
     }
@@ -93,14 +102,14 @@ class DemoSession(
     /** Clé des équipements simulés, à afficher dans l'écran de démo (publique, TEST ONLY). */
     val deviceKeyHex: String get() = SimulatedVictron.deviceKeyHex(scenario)
 
-    fun readings(): Flow<Reading> = merge(
+    override fun readings(): Flow<Reading> = merge(
         batteryDriver.readings(battery, transport),
         driver.readings(mppt, transport),
         driver.readings(shunt, transport),
     )
 
     /** Vérifie puis enregistre la clé saisie pour [device]. Voir [enterVictronKey]. */
-    fun submitKey(device: KnownDevice, text: String): KeyEntryOutcome =
+    override fun submitKey(device: KnownDevice, text: String): KeyEntryOutcome =
         enterVictronKey(device.deviceId, text, transport.latestVictronData(device.platformId), keys)
 }
 
