@@ -25,6 +25,7 @@ kotlin {
             implementation(project(":ble"))
             implementation(project(":drivers"))
             implementation(project(":simulator"))
+            implementation(project(":storage"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
@@ -35,6 +36,9 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+        }
+        getByName("androidUnitTest").dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
         }
     }
 }

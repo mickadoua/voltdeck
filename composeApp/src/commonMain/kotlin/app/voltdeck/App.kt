@@ -73,24 +73,23 @@ fun App(
     bluetooth: BluetoothAccess = AlwaysGrantedBluetooth,
     transport: (() -> BleTransport)? = null,
 ) {
-    var scenario by remember { mutableStateOf(SimulationScenario.SUNNY_DAY) }
-    var demo by remember { mutableStateOf(transport == null || registry.all().isEmpty()) }
-    var registryVersion by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val runtime = remember { VoltdeckRuntime(keys, shuntSetups, registry, transport, null, scope).also { it.start() } }
+    App(runtime, bluetooth)
+}
+
+@Composable
+fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess) {
     var darkOverride by remember { mutableStateOf<Boolean?>(null) }
     val dark = darkOverride ?: isSystemInDarkTheme()
-
-    val scope = rememberCoroutineScope()
-    val live = remember(keys, registry) { transport?.let { LiveSession(it(), keys, registry, scope) } }
-    val demoSession = remember(scenario, keys) { DemoSession(scenario, keys) }
-    val session: Session = if (demo || live == null) demoSession else live
-
-    val latest = remember(session, registryVersion) { mutableStateMapOf<DeviceId, Reading>() }
-    LaunchedEffect(session, registryVersion) { session.readings().collect { latest[it.deviceId] = it } }
+    val live = runtime.live
+    val session by runtime.session.collectAsState()
+    val latest by runtime.latest.collectAsState()
+    val changes by runtime.changes.collectAsState()
     val statuses by session.linkStatus.collectAsState()
-    LaunchedEffect(session, statuses) { dropWrongKeyReadings(latest, statuses) }
-    val savedSetups = remember(shuntSetups) { mutableStateMapOf<DeviceId, ShuntSetup>() }
-    val devices = remember(session, registryVersion) { session.devices }
-    val setupOf = { id: DeviceId -> savedSetups[id] ?: shuntSetups.get(id) ?: ShuntSetup.DEFAULT }
+    val devices = remember(session, changes) { session.devices }
+    val setupOf = { id: DeviceId -> runtime.setupOf(id) }
+    val overview = remember(latest, devices, changes) { buildOverview(devices, latest, setupOf) }
 
     var screen by remember { mutableStateOf<Screen>(Screen.Overview) }
 
@@ -104,15 +103,14 @@ fun App(
                     initial = setupOf(current.device.deviceId),
                     onBack = { screen = Screen.Devices },
                     onSave = {
-                        shuntSetups.put(current.device.deviceId, it)
-                        savedSetups[current.device.deviceId] = it
+                        runtime.saveSetup(current.device.deviceId, it)
                         screen = Screen.Overview
                     },
                 )
                 Screen.AddDevice -> if (live != null) {
                     AddDeviceScreen(live, bluetooth, onBack = { screen = Screen.Devices }, onAdded = {
-                        registryVersion++
-                        demo = false
+                        runtime.setDemo(false)
+                        runtime.devicesChanged()
                         screen = Screen.Devices
                     })
                 }
@@ -131,7 +129,7 @@ fun App(
                             } else {
                                 Column(Modifier.fillMaxSize()) {
                                     if (session is DemoSession && live != null) DemoBanner { screen = Screen.AddDevice }
-                                    OverviewContent(buildOverview(devices, latest, setupOf), Modifier.weight(1f))
+                                    OverviewContent(overview, Modifier.weight(1f))
                                 }
                             }
                         } else {
@@ -141,13 +139,13 @@ fun App(
                                 latest = latest,
                                 statuses = statuses,
                                 setupOf = setupOf,
-                                onMode = { demo = it },
-                                onScenario = { scenario = it },
+                                onMode = { runtime.setDemo(it) },
+                                onScenario = { runtime.setScenario(it) },
                                 onShunt = { screen = Screen.Shunt(it) },
                                 onAdd = { screen = Screen.AddDevice },
                                 onRemove = { id ->
                                     live?.remove(id)
-                                    registryVersion++
+                                    runtime.devicesChanged()
                                 },
                             )
                         }
