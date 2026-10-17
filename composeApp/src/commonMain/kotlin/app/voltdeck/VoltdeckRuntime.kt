@@ -13,6 +13,7 @@ import app.voltdeck.storage.SystemStats
 import app.voltdeck.storage.db.VoltdeckDatabase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -52,6 +54,7 @@ class VoltdeckRuntime(
     val zone: TimeZone = TimeZone.currentSystemDefault(),
     private val realClock: Clock = Clock.System,
     private val demoHistoryDays: Int = DEMO_HISTORY_DAYS,
+    private val historyContext: CoroutineContext = Dispatchers.Default,
 ) {
     val live: LiveSession? = transportFactory?.let { LiveSession(it(), keys, registry, scope) }
 
@@ -127,17 +130,21 @@ class VoltdeckRuntime(
             recorder.value = RecorderState(error = "Base indisponible : ${e.message}")
             null
         }
+        databaseState.value = db
+        val now = session.clock.now()
+        val since = if (demo) demoHistoryStart(now, zone, demoHistoryDays) else now - 1.minutes
+        val aggregator = db?.let { register(it, session, since); MinuteAggregator(it) }
         if (db != null && demo) {
-            try {
-                seedDemoHistory(db, session.records(), session.clock.now(), zone, demoHistoryDays)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                recorder.value = RecorderState(error = "Historique de démo indisponible : ${e.message}")
+            launch(historyContext) {
+                try {
+                    seedDemoHistory(db, now, zone, demoHistoryDays)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    recorder.update { it.copy(error = "Historique de démo indisponible : ${e.message}") }
+                }
             }
         }
-        databaseState.value = db
-        val aggregator = db?.let { register(it, session); MinuteAggregator(it) }
         val maintenance = db?.let { Maintenance(it) }
         var lastMaintenance = session.clock.now()
         val ticker = launch {
@@ -162,10 +169,9 @@ class VoltdeckRuntime(
         }
     }
 
-    private fun register(db: VoltdeckDatabase, session: Session) {
+    private fun register(db: VoltdeckDatabase, session: Session, createdAt: Instant) {
         val store = DeviceStore(db)
         val known = store.all().map { it.id }.toSet()
-        val createdAt = session.clock.now() - 1.minutes
         session.records().filter { it.id !in known }.forEach {
             store.register(it.id, it.driverId, it.role, it.name, it.platformId.value, it.model, createdAt)
         }

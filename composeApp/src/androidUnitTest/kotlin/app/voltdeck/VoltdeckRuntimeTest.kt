@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -39,7 +40,7 @@ class VoltdeckRuntimeTest {
 
     private fun TestScope.runtime(databases: Databases?, zone: TimeZone = TimeZone.UTC) = VoltdeckRuntime(
         InMemoryVictronKeyStore(), InMemoryShuntSetupStore(), InMemoryDeviceRegistry(), null, databases, backgroundScope,
-        zone, object : Clock { override fun now() = start + testScheduler.currentTime.milliseconds },
+        zone, object : Clock { override fun now() = start + testScheduler.currentTime.milliseconds }, historyContext = EmptyCoroutineContext,
     )
 
     @Test
