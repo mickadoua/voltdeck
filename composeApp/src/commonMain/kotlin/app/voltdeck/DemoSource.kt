@@ -40,7 +40,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 const val DEMO_SPEED = 60.0
-private const val DEMO_SEED = 1L
+internal const val DEMO_SEED = 1L
 
 // Une demi-seconde réelle = 30 s simulées : sous l’écart maximal d’intégration de l’énergie (60 s), malgré la gigue.
 val DEMO_PERIOD = 500.milliseconds

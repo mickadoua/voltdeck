@@ -51,6 +51,7 @@ class VoltdeckRuntime(
     private val scope: CoroutineScope,
     val zone: TimeZone = TimeZone.currentSystemDefault(),
     private val realClock: Clock = Clock.System,
+    private val demoHistoryDays: Int = DEMO_HISTORY_DAYS,
 ) {
     val live: LiveSession? = transportFactory?.let { LiveSession(it(), keys, registry, scope) }
 
@@ -125,6 +126,15 @@ class VoltdeckRuntime(
         } catch (e: Exception) {
             recorder.value = RecorderState(error = "Base indisponible : ${e.message}")
             null
+        }
+        if (db != null && demo) {
+            try {
+                seedDemoHistory(db, session.records(), session.clock.now(), zone, demoHistoryDays)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                recorder.value = RecorderState(error = "Historique de démo indisponible : ${e.message}")
+            }
         }
         databaseState.value = db
         val aggregator = db?.let { register(it, session); MinuteAggregator(it) }

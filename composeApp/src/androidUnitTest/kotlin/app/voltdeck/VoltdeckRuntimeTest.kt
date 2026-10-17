@@ -117,4 +117,23 @@ class VoltdeckRuntimeTest {
     fun demoReadingsStayWithinTheEnergyIntegrationGap() {
         assertTrue(DEMO_PERIOD * DEMO_SPEED * 1.5 <= 60.seconds, "${DEMO_PERIOD * DEMO_SPEED}")
     }
+
+    @Test
+    fun theDemoStartsWithWeeksOfVariedHistory() = runTest {
+        val db = memoryDatabase()
+        val runtime = runtime(object : Databases {
+            override fun real() = error("démo")
+            override fun freshDemo() = db
+        })
+        runtime.start()
+        runCurrent()
+        val now = runtime.session.value.clock.now()
+        val today = now.toLocalDateTime(TimeZone.UTC).date
+        val stats = loadStats(runtime.stats()!!, runtime.energyHistory()!!, AggregateReader(db), SimulatedPlant.SHUNT_ID, StatsPeriod(PeriodKind.MONTH, today).previous(), TimeZone.UTC, now)
+        val days = stats.buckets.mapNotNull { it.producedWh }
+        assertTrue(days.size >= 28, "${days.size} jours")
+        assertTrue(days.max() > 1.5 * days.min(), "météo trop uniforme : $days")
+        assertTrue(stats.buckets.all { it.consumedWh != null }, "${stats.buckets}")
+        assertTrue(stats.soc.isNotEmpty())
+    }
 }
