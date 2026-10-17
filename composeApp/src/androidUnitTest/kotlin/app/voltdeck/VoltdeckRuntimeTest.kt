@@ -24,6 +24,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -36,9 +37,9 @@ class VoltdeckRuntimeTest {
         return VoltdeckDatabase(driver)
     }
 
-    private fun TestScope.runtime(databases: Databases?) = VoltdeckRuntime(
+    private fun TestScope.runtime(databases: Databases?, zone: TimeZone = TimeZone.UTC) = VoltdeckRuntime(
         InMemoryVictronKeyStore(), InMemoryShuntSetupStore(), InMemoryDeviceRegistry(), null, databases, backgroundScope,
-        TimeZone.UTC, object : Clock { override fun now() = start + testScheduler.currentTime.milliseconds },
+        zone, object : Clock { override fun now() = start + testScheduler.currentTime.milliseconds },
     )
 
     @Test
@@ -93,5 +94,27 @@ class VoltdeckRuntimeTest {
         runtime.saveSetup(SimulatedPlant.SHUNT_ID, ShuntSetup(ShuntPlacement.LOAD, Circuit.FRIDGE))
         assertEquals(ShuntPlacement.LOAD, runtime.setupOf(SimulatedPlant.SHUNT_ID).placement)
         assertEquals(1, runtime.changes.value)
+    }
+
+    @Test
+    fun theMorningOfTheDemoInParisHasHourlyBars() = runTest {
+        val db = memoryDatabase()
+        val paris = TimeZone.of("Europe/Paris")
+        val runtime = runtime(object : Databases {
+            override fun real() = error("démo")
+            override fun freshDemo() = db
+        }, paris)
+        runtime.start()
+        advanceTimeBy(4.minutes)
+        runCurrent()
+        val now = runtime.session.value.clock.now()
+        val stats = loadStats(runtime.stats()!!, runtime.energyHistory()!!, AggregateReader(db), SimulatedPlant.SHUNT_ID, StatsPeriod(PeriodKind.DAY, now.toLocalDateTime(paris).date), paris, now)
+        assertTrue(stats.buckets.isNotEmpty(), "aucune heure")
+        assertTrue(stats.buckets.any { (it.producedWh ?: 0.0) > 0.0 || (it.consumedWh ?: 0.0) > 0.0 }, "${stats.buckets}")
+    }
+
+    @Test
+    fun demoReadingsStayWithinTheEnergyIntegrationGap() {
+        assertTrue(DEMO_PERIOD * DEMO_SPEED * 1.5 <= 60.seconds, "${DEMO_PERIOD * DEMO_SPEED}")
     }
 }
