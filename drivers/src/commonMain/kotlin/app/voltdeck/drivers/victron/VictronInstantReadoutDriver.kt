@@ -21,25 +21,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.update
 import kotlin.time.Clock
 
 /** État du déchiffrement d'un équipement, affichable. */
 enum class VictronLinkStatus { WAITING, OK, NO_KEY, WRONG_KEY }
 
-/** Compteurs et états, sans donnée sensible. Non thread-safe : alimenté par la collecte d'un seul flux à la fois. */
+/** Compteurs et états, sans donnée sensible. Sûr entre flux concurrents : un flux par appareil écrit ici. */
 class VictronDiagnostics {
-    var truncatedFrames: Int = 0
-        private set
+    private val truncated = MutableStateFlow(0)
+    val truncatedFrames: Int get() = truncated.value
 
     private val statuses = MutableStateFlow<Map<DeviceId, VictronLinkStatus>>(emptyMap())
     val status: StateFlow<Map<DeviceId, VictronLinkStatus>> get() = statuses
 
     internal fun frameTruncated() {
-        truncatedFrames++
+        truncated.update { it + 1 }
     }
 
     internal fun setStatus(device: DeviceId, value: VictronLinkStatus) {
-        if (statuses.value[device] != value) statuses.value = statuses.value + (device to value)
+        statuses.update { if (it[device] == value) it else it + (device to value) }
     }
 }
 
