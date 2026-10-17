@@ -1,0 +1,26 @@
+selectMonth:
+SELECT * FROM agg_month
+WHERE device_id = ? AND metric = ? AND channel = ? AND month >= ? AND month < ?
+ORDER BY month;
+
+-- Recalcul d'un mois local depuis ses jours (idempotent). Bornes : clés de jour [premier, suivant).
+rollupMonth:
+INSERT OR REPLACE INTO agg_month(device_id, metric, channel, month, tz_id, count, min, max, sum, last)
+SELECT g.device_id, g.metric, g.channel, ?1, ?2, g.count, g.min, g.max, g.sum,
+       (SELECT x.last FROM agg_day x
+         WHERE x.device_id = g.device_id AND x.metric = g.metric AND x.channel = g.channel
+           AND x.day >= ?3 AND x.day < ?4
+         ORDER BY x.day DESC LIMIT 1)
+FROM (
+  SELECT device_id, metric, channel,
+         SUM(count) AS count, MIN(min) AS min, MAX(max) AS max, SUM(sum) AS sum
+  FROM agg_day
+  WHERE day >= ?3 AND day < ?4
+  GROUP BY device_id, metric, channel
+) g;
+
+deleteMonthRows:
+DELETE FROM agg_month WHERE month = ?;
+
+countMonths:
+SELECT COUNT(*) FROM agg_month;
