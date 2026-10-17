@@ -10,15 +10,17 @@ import app.voltdeck.ble.ScanFilter
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.KnownDevice
+import app.voltdeck.drivers.jbd.JbdDriver
+import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
 import app.voltdeck.drivers.victron.VictronInstantReadoutDriver
 import app.voltdeck.drivers.victron.VictronKeyStore
 import app.voltdeck.simulator.AcceleratedClock
+import app.voltdeck.simulator.JbdScenario
 import app.voltdeck.simulator.SimulatedPlant
 import app.voltdeck.simulator.SimulatedTransport
 import app.voltdeck.simulator.SimulatedVictron
 import app.voltdeck.simulator.SimulationScenario
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.datetime.TimeZone
@@ -27,6 +29,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 const val DEMO_SPEED = 60.0
@@ -55,41 +58,51 @@ class RecordingTransport(private val inner: BleTransport) : BleTransport {
 
 /**
  * Une session du mode démo : le simulateur annonce de vraies trames Victron chiffrées, le pilote `victron.ir` les
- * déchiffre avec les clés de [keys]. Les clés des équipements simulés sont publiques (TEST ONLY) et recopiées dans
- * [keys] au démarrage de la session, comme si l'utilisateur les avait saisies.
+ * déchiffre avec les clés de [keys] ; la batterie passe par le vrai [JbdDriver] (trames JBD simulées). Les clés des
+ * équipements simulés sont publiques (TEST ONLY) et recopiées dans [keys] au démarrage de la session, comme si
+ * l'utilisateur les avait saisies. À collecter depuis un seul thread : le simulateur n'est pas thread-safe.
  */
 class DemoSession(
     val scenario: SimulationScenario,
     val keys: VictronKeyStore,
     real: Clock = Clock.System,
     zone: TimeZone = TimeZone.currentSystemDefault(),
+    jbdScenario: JbdScenario = JbdScenario.Nominal,
 ) {
     private val simulatedClock = demoClock(real, zone)
+    private val plant = SimulatedPlant(DEMO_SEED, simulatedClock.now(), zone)
     private val transport = RecordingTransport(
-        SimulatedTransport(DEMO_SEED, scenario = scenario, clock = simulatedClock, zone = zone),
+        SimulatedTransport(DEMO_SEED, scenario = scenario, jbdScenario = jbdScenario, clock = simulatedClock, zone = zone, plant = plant),
     )
-    private val batteryPlant = SimulatedPlant(DEMO_SEED, simulatedClock.now(), zone)
+    private val batteryDriver = JbdDriver(simulatedClock, pollInterval = 1.seconds)
 
     val driver = VictronInstantReadoutDriver(keys, simulatedClock)
+    val battery = KnownDevice(SimulatedPlant.BATTERY_ID, SimulatedTransport.BATTERY_ID, DeviceRole.BATTERY)
     val mppt = KnownDevice(SimulatedPlant.MPPT_ID, SimulatedTransport.MPPT_ID, DeviceRole.SOLAR_CHARGER)
     val shunt = KnownDevice(SimulatedPlant.SHUNT_ID, SimulatedTransport.SHUNT_ID, DeviceRole.SHUNT)
     val victronDevices = listOf(mppt, shunt)
 
     init {
-        // La batterie JBD n'a pas encore de pilote (VOL-6) : son Reading vient directement du modèle (flux ci-dessous).
-        victronDevices.forEach { keys.put(it.id, SimulatedVictron.TEST_KEY) }
+        victronDevices.forEach { keys.put(it.deviceId, SimulatedVictron.TEST_KEY) }
     }
 
     /** Clé des équipements simulés, à afficher dans l'écran de démo (publique, TEST ONLY). */
     val deviceKeyHex: String get() = SimulatedVictron.deviceKeyHex(scenario)
 
     fun readings(): Flow<Reading> = merge(
-        batteryPlant.readings(simulatedClock).filter { it.deviceId == SimulatedPlant.BATTERY_ID },
+        batteryDriver.readings(battery, transport),
         driver.readings(mppt, transport),
         driver.readings(shunt, transport),
     )
 
     /** Vérifie puis enregistre la clé saisie pour [device]. Voir [enterVictronKey]. */
     fun submitKey(device: KnownDevice, text: String): KeyEntryOutcome =
-        enterVictronKey(device.id, text, transport.latestVictronData(device.platformId), keys)
+        enterVictronKey(device.deviceId, text, transport.latestVictronData(device.platformId), keys)
 }
+
+/** Flux de mesures du mode démo avec les clés simulées déjà saisies, accéléré ×[DEMO_SPEED]. */
+fun demoReadings(
+    real: Clock,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+    jbdScenario: JbdScenario = JbdScenario.Nominal,
+): Flow<Reading> = DemoSession(SimulationScenario.SUNNY_DAY, InMemoryVictronKeyStore(), real, zone, jbdScenario).readings()

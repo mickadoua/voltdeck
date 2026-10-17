@@ -53,7 +53,7 @@ class VictronInstantReadoutDriverTest {
 
     @Test
     fun readsTheKnownDeviceOnly() = runTest {
-        val keys = InMemoryVictronKeyStore().apply { put(shunt.id, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
+        val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
         val other = PlatformDeviceId("test-other")
         val transport = ScriptedTransport(
             listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV), other), adv(hex(Vectors.BATTERY_MONITOR_ADV))),
@@ -61,19 +61,19 @@ class VictronInstantReadoutDriverTest {
         val d = driver(keys)
         val readings = d.readings(shunt, transport).toList()
         assertEquals(1, readings.size)
-        assertEquals(shunt.id, readings[0].deviceId)
+        assertEquals(shunt.deviceId, readings[0].deviceId)
         assertEquals(Instant.fromEpochSeconds(1_000), readings[0].at)
         assertEquals(12.53, readings[0].samples.value(Metric.BATTERY_VOLTAGE))
-        assertEquals(VictronLinkStatus.OK, d.diagnostics.status.value[shunt.id])
+        assertEquals(VictronLinkStatus.OK, d.diagnostics.status.value[shunt.deviceId])
     }
 
     @Test
     fun wrongKeyGivesNoReadingAndAStatus() = runTest {
-        val keys = InMemoryVictronKeyStore().apply { put(shunt.id, keyOf(Vectors.SOLAR_KEY)) }
+        val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.SOLAR_KEY)) }
         val d = driver(keys)
         val readings = d.readings(shunt, ScriptedTransport(listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV))))).toList()
         assertEquals(emptyList(), readings)
-        assertEquals(VictronLinkStatus.WRONG_KEY, d.diagnostics.status.value[shunt.id])
+        assertEquals(VictronLinkStatus.WRONG_KEY, d.diagnostics.status.value[shunt.deviceId])
         assertEquals(0, d.diagnostics.truncatedFrames)
     }
 
@@ -82,12 +82,12 @@ class VictronInstantReadoutDriverTest {
         val d = driver(InMemoryVictronKeyStore())
         val readings = d.readings(shunt, ScriptedTransport(listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV))))).toList()
         assertEquals(emptyList(), readings)
-        assertEquals(VictronLinkStatus.NO_KEY, d.diagnostics.status.value[shunt.id])
+        assertEquals(VictronLinkStatus.NO_KEY, d.diagnostics.status.value[shunt.deviceId])
     }
 
     @Test
     fun truncatedFramesAreSkippedAndCounted() = runTest {
-        val keys = InMemoryVictronKeyStore().apply { put(shunt.id, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
+        val keys = InMemoryVictronKeyStore().apply { put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
         val good = hex(Vectors.BATTERY_MONITOR_ADV)
         val transport = ScriptedTransport(
             listOf(adv(good.copyOf(5)), adv(good.copyOf(good.size - 1)), adv(good), adv(good.copyOf(12))),
@@ -96,13 +96,13 @@ class VictronInstantReadoutDriverTest {
         val readings = d.readings(shunt, transport).toList()
         assertEquals(1, readings.size, "seule la trame complète est décodée")
         assertEquals(3, d.diagnostics.truncatedFrames)
-        assertEquals(VictronLinkStatus.OK, d.diagnostics.status.value[shunt.id])
+        assertEquals(VictronLinkStatus.OK, d.diagnostics.status.value[shunt.deviceId])
     }
 
     @Test
     fun aKeyThatMatchesAnotherKindOfDeviceDoesNotProduceReadings() = runTest {
         val mppt = KnownDevice(DeviceId("mppt-1"), platformId, DeviceRole.SOLAR_CHARGER)
-        val keys = InMemoryVictronKeyStore().apply { put(mppt.id, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
+        val keys = InMemoryVictronKeyStore().apply { put(mppt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY)) }
         val readings = driver(keys).readings(mppt, ScriptedTransport(listOf(adv(hex(Vectors.BATTERY_MONITOR_ADV))))).toList()
         assertEquals(emptyList(), readings, "un SmartShunt ne peut pas alimenter un équipement enregistré comme MPPT")
     }

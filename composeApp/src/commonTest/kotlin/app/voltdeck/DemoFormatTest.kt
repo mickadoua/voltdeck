@@ -48,4 +48,39 @@ class DemoFormatTest {
     fun victronDevicesHaveATitle() {
         assertEquals("SmartShunt (simulé)", deviceTitle(app.voltdeck.simulator.SimulatedPlant.SHUNT_ID))
     }
+
+    @Test
+    fun protectionAlarmsAreListedInFrench() {
+        assertEquals("Aucune", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 0.0)))
+        assertEquals("surtension cellule", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 1.0)))
+        assertEquals("surtension cellule, court-circuit", protectionText(0x401))
+        assertEquals("Alarmes", sampleLabel(Sample(Metric.PROTECTION_FLAGS, value = 0.0)))
+    }
+
+    @Test
+    fun unnamedProtectionBitIsNeverShownAsNone() {
+        assertEquals("Alarme inconnue", protectionText(0x2000))
+        assertEquals("Alarme inconnue", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 0x8000.toDouble())))
+        assertEquals("surtension cellule", protectionText(0x2001))
+    }
+
+    @Test
+    fun relayStateTellsWhichDirectionIsCut() {
+        assertEquals("Charge et décharge actives", relayText(3))
+        assertEquals("Charge coupée", relayText(2))
+        assertEquals("Décharge coupée", relayText(1))
+        assertEquals("Charge et décharge coupées", relayText(0))
+    }
+
+    @Test
+    fun fetStateIsShownAsRelayAndIgnoresReservedBits() {
+        assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 3.0)))
+        assertEquals("Charge et décharge coupées", sampleText(Sample(Metric.FET_STATE, value = 0.0)))
+        assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 0xFF.toDouble())))
+    }
+
+    @Test
+    fun chargerDeviceStateIsNotShownAsRelay() {
+        assertEquals("Absorption", sampleText(Sample(Metric.DEVICE_STATE, value = 4.0)))
+    }
 }

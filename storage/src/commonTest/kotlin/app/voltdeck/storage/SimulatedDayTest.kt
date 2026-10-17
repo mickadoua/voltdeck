@@ -30,6 +30,7 @@ class SimulatedDayTest {
         val db = createTestDatabase()
         db.addDevice(SimulatedPlant.BATTERY_ID, DeviceRole.BATTERY)
         db.addDevice(SimulatedPlant.MPPT_ID, DeviceRole.SOLAR_CHARGER)
+        db.addDevice(SimulatedPlant.SHUNT_ID, DeviceRole.SHUNT)
         val plant = SimulatedPlant(seed = 7L, start = start)
         val clock = object : Clock {
             override fun now(): Instant = start + (testScheduler.currentTime * 60).milliseconds

@@ -69,18 +69,18 @@ class VictronInstantReadoutDriver(
 
     private fun decode(device: KnownDevice, adv: Adv): Reading? {
         val data = adv.manufacturerData[ConnectionPolicy.VICTRON_COMPANY_ID] ?: return null
-        val key = keys.get(device.id)
+        val key = keys.get(device.deviceId)
         if (key == null) {
-            diagnostics.setStatus(device.id, VictronLinkStatus.NO_KEY)
+            diagnostics.setStatus(device.deviceId, VictronLinkStatus.NO_KEY)
             return null
         }
         return when (val result = VictronDecoder.decode(data, key)) {
             is VictronDecodeResult.Decoded -> {
-                diagnostics.setStatus(device.id, VictronLinkStatus.OK)
-                if (result.type.role == device.role && result.samples.isNotEmpty()) Reading(device.id, clock.now(), result.samples) else null
+                diagnostics.setStatus(device.deviceId, VictronLinkStatus.OK)
+                if (result.type.role == device.role && result.samples.isNotEmpty()) Reading(device.deviceId, clock.now(), result.samples) else null
             }
             VictronDecodeResult.WrongKey -> {
-                diagnostics.setStatus(device.id, VictronLinkStatus.WRONG_KEY)
+                diagnostics.setStatus(device.deviceId, VictronLinkStatus.WRONG_KEY)
                 null
             }
             VictronDecodeResult.Truncated -> {

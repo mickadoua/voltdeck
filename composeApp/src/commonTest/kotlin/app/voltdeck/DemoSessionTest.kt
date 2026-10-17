@@ -71,8 +71,8 @@ class DemoSessionTest {
                 assertEquals(expected.firstOrNull { it.metric == Metric.TIME_TO_GO }?.value, r.samples.firstOrNull { it.metric == Metric.TIME_TO_GO }?.value)
             }
         }
-        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.mppt.id])
-        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.shunt.id])
+        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.mppt.deviceId])
+        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.shunt.deviceId])
     }
 
     @Test
@@ -90,8 +90,8 @@ class DemoSessionTest {
         advanceTimeBy(3.seconds)
         runCurrent()
         assertTrue(got.none { it.deviceId == SimulatedPlant.MPPT_ID || it.deviceId == SimulatedPlant.SHUNT_ID })
-        assertEquals(VictronLinkStatus.WRONG_KEY, session.driver.diagnostics.status.value[session.mppt.id])
-        assertEquals(VictronLinkStatus.WRONG_KEY, session.driver.diagnostics.status.value[session.shunt.id])
+        assertEquals(VictronLinkStatus.WRONG_KEY, session.driver.diagnostics.status.value[session.mppt.deviceId])
+        assertEquals(VictronLinkStatus.WRONG_KEY, session.driver.diagnostics.status.value[session.shunt.deviceId])
 
         // La clé de test publique est refusée : ce n'est pas celle de l'appareil de ce scénario.
         val refused = session.submitKey(session.mppt, SimulatedVictron.deviceKeyHex(SimulationScenario.SUNNY_DAY))
@@ -102,7 +102,7 @@ class DemoSessionTest {
         runCurrent()
         assertTrue(got.any { it.deviceId == SimulatedPlant.MPPT_ID }, "la clé de l'appareil débloque le MPPT")
         assertTrue(got.none { it.deviceId == SimulatedPlant.SHUNT_ID }, "le SmartShunt a toujours la mauvaise clé")
-        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.mppt.id])
+        assertEquals(VictronLinkStatus.OK, session.driver.diagnostics.status.value[session.mppt.deviceId])
     }
 
     @Test

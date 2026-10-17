@@ -13,10 +13,11 @@ import app.voltdeck.ble.ScanFilter
 import app.voltdeck.core.DeviceId
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.victron.VictronRecordType
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.datetime.TimeZone
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -29,19 +30,21 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Les annonces Victron sont de vrais enregistrements « Instant Readout » : les mesures de [SimulatedPlant] à l'heure
  * de [clock] sont encodées bit à bit puis chiffrées en AES-CTR avec la clé du [scenario] (voir [SimulatedVictron]).
- * La trame de la batterie reste un gabarit, et le lien GATT n'émet aucune notification : l'encodage JBD arrive avec
- * VOL-6. Non thread-safe : tous les collecteurs d'[advertisements] doivent s'exécuter sur le même fil.
+ * Le lien GATT de la batterie répond par de vraies trames JBD ([SimulatedJbdBms]), selon le [JbdScenario] choisi.
+ * Non thread-safe : tous les collecteurs d'[advertisements] doivent s'exécuter sur le même fil.
  */
 class SimulatedTransport(
     private val seed: Long = 1L,
     private val advertisementPeriod: Duration = 1.seconds,
     private val scenario: SimulationScenario = SimulationScenario.SUNNY_DAY,
+    jbdScenario: JbdScenario = JbdScenario.Nominal,
     private val clock: Clock = Clock.System,
     zone: TimeZone = TimeZone.UTC,
+    private val plant: SimulatedPlant = SimulatedPlant(seed, jbdScenario.plantStart(clock.now()), zone),
 ) : BleTransport {
     private val accepted = mutableListOf<ByteArray>()
-    private val plant = SimulatedPlant(seed, clock.now(), zone)
     private val victronKey = SimulatedVictron.deviceKey(scenario)
+    private val bms = SimulatedJbdBms(plant, jbdScenario, clock)
 
     /** Trames acceptées par les liens GATT de ce transport, dans l'ordre. */
     val acceptedFrames: List<ByteArray> get() = accepted.map { it.copyOf() }
@@ -75,20 +78,46 @@ class SimulatedTransport(
         val device = devices.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
         val ledger = ConnectionLedger().apply { record(Adv(id, device.name, -60, device.advertisedManufacturerData(), device.serviceUuids)) }
         ledger.requireConnectable(id, profile)
+        bms.markConnectAttempt()
+        if (bms.isOffline()) throw SimulatedLinkException("BMS simulé hors de portée")
         return SimulatedGattLink()
     }
 
+    /**
+     * Lien GATT du BMS simulé : à chaque requête autorisée, les notifications portent la vraie trame JBD de réponse,
+     * découpée en morceaux de 20 octets. Les scénarios de [JbdScenario] y ajoutent coupures, trames corrompues et
+     * premières écritures en échec.
+     */
     inner class SimulatedGattLink internal constructor() : ReadOnlyGattLink {
-        override val notifications: Flow<ByteArray> = emptyFlow()
+        private val inbox = Channel<ByteArray>(Channel.UNLIMITED)
+        private var failuresLeft = bms.failuresPerConnection()
+        private var lost = false
 
-        override suspend fun request(cmd: AllowedCommand) = requestFrame(cmd.frame())
+        override val notifications: Flow<ByteArray> = inbox.receiveAsFlow()
+
+        override suspend fun request(cmd: AllowedCommand) {
+            requestFrame(cmd.frame())
+            bms.respond(cmd).forEach { inbox.trySend(it) }
+        }
 
         internal fun requestFrame(frame: ByteArray) {
             ReadAllowlist.requireAllowed(frame)
+            if (lost || bms.isOffline()) {
+                lost = true
+                val cause = SimulatedLinkException("liaison perdue")
+                inbox.close(cause)
+                throw cause
+            }
+            if (failuresLeft > 0) {
+                failuresLeft--
+                throw SimulatedLinkException("écriture simulée en échec")
+            }
             accepted += frame.copyOf()
         }
 
-        override fun close() = Unit
+        override fun close() {
+            inbox.close()
+        }
     }
 
     private class VictronRole(val plantId: DeviceId, val type: VictronRecordType, val modelId: Int, val nonceOffset: Long)

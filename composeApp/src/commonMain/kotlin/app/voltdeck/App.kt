@@ -92,9 +92,9 @@ fun DemoModeScreen(session: DemoSession, onScenario: (SimulationScenario) -> Uni
         latest.values.filter { it.deviceId == SimulatedPlant.BATTERY_ID }.forEach { DeviceCard(it) }
         session.victronDevices.forEach { device ->
             DeviceCard(
-                reading = latest[device.id],
-                title = deviceTitle(device.id),
-                status = statuses[device.id] ?: VictronLinkStatus.WAITING,
+                reading = latest[device.deviceId],
+                title = deviceTitle(device.deviceId),
+                status = statuses[device.deviceId] ?: VictronLinkStatus.WAITING,
                 keyEntry = { KeyEntry(session, device) },
             )
         }

@@ -150,8 +150,8 @@ class SimulatedVictronTest {
         val truth = SimulatedPlant(seed = 1L, start = noon).readingsAt(noon)
         val transport = SimulatedTransport(seed = 1L, clock = fixedClock(noon), scenario = SimulationScenario.SUNNY_DAY)
         val keys = InMemoryVictronKeyStore().apply {
-            put(mpptDevice.id, SimulatedVictron.TEST_KEY)
-            put(shuntDevice.id, SimulatedVictron.TEST_KEY)
+            put(mpptDevice.deviceId, SimulatedVictron.TEST_KEY)
+            put(shuntDevice.deviceId, SimulatedVictron.TEST_KEY)
         }
         val driver = VictronInstantReadoutDriver(keys, fixedClock(noon))
         val mppt = driver.readings(mpptDevice, transport).first().samples
@@ -171,19 +171,19 @@ class SimulatedVictronTest {
         assertEquals(trueShunt.value(Metric.BATTERY_CURRENT), shunt.value(Metric.BATTERY_CURRENT), 0.0011)
         assertTrue(shunt.value(Metric.CONSUMED_AH) < 0.0)
         assertEquals(trueShunt.value(Metric.TEMPERATURE), shunt.value(Metric.TEMPERATURE), 0.051)
-        assertEquals(VictronLinkStatus.OK, driver.diagnostics.status.value[shuntDevice.id])
+        assertEquals(VictronLinkStatus.OK, driver.diagnostics.status.value[shuntDevice.deviceId])
     }
 
     @Test
     fun wrongVictronKeyScenarioIsRefusedAndReportedAsWrongKey() = runTest {
         val transport = SimulatedTransport(clock = fixedClock(noon), scenario = SimulationScenario.WRONG_VICTRON_KEY)
-        val keys = InMemoryVictronKeyStore().apply { put(mpptDevice.id, SimulatedVictron.TEST_KEY) }
+        val keys = InMemoryVictronKeyStore().apply { put(mpptDevice.deviceId, SimulatedVictron.TEST_KEY) }
         val driver = VictronInstantReadoutDriver(keys, fixedClock(noon))
 
         val readings = withTimeoutOrNull(5.seconds) { driver.readings(mpptDevice, transport).first() }
 
         assertNull(readings, "aucune mesure ne doit sortir avec une mauvaise clé")
-        assertEquals(VictronLinkStatus.WRONG_KEY, driver.diagnostics.status.value[mpptDevice.id])
+        assertEquals(VictronLinkStatus.WRONG_KEY, driver.diagnostics.status.value[mpptDevice.deviceId])
         val adv = transport.advertisements(ScanFilter(companyId = companyId)).first { it.id == SimulatedTransport.MPPT_ID }
         assertEquals(
             VictronDecoder.KeyCheck.Mismatch,
@@ -194,7 +194,7 @@ class SimulatedVictronTest {
     @Test
     fun theSameDevicesAreDecodedWithTheirOwnKeyInTheWrongKeyScenario() = runTest {
         val transport = SimulatedTransport(clock = fixedClock(noon), scenario = SimulationScenario.WRONG_VICTRON_KEY)
-        val keys = InMemoryVictronKeyStore().apply { put(mpptDevice.id, SimulatedVictron.OTHER_KEY) }
+        val keys = InMemoryVictronKeyStore().apply { put(mpptDevice.deviceId, SimulatedVictron.OTHER_KEY) }
         val driver = VictronInstantReadoutDriver(keys, fixedClock(noon))
         assertTrue(driver.readings(mpptDevice, transport).first().samples.isNotEmpty())
     }
