@@ -73,6 +73,8 @@ fun App(
 
     val latest = remember(session) { mutableStateMapOf<DeviceId, Reading>() }
     LaunchedEffect(session) { session.readings().collect { latest[it.deviceId] = it } }
+    val statuses by session.driver.diagnostics.status.collectAsState()
+    LaunchedEffect(session, statuses) { dropWrongKeyReadings(latest, statuses) }
     val savedSetups = remember(shuntSetups) { mutableStateMapOf<DeviceId, ShuntSetup>() }
     val devices = listOf(session.battery) + session.victronDevices
     val setupOf = { id: DeviceId -> savedSetups[id] ?: shuntSetups.get(id) ?: ShuntSetup.DEFAULT }
@@ -84,7 +86,6 @@ fun App(
         Column(Modifier.fillMaxSize().background(p.bg).windowInsetsPadding(WindowInsets.safeDrawing)) {
             when (val current = screen) {
                 is Screen.Shunt -> {
-                    val statuses by session.driver.diagnostics.status.collectAsState()
                     ShuntScreen(
                         title = deviceTitle(current.device.deviceId),
                         status = statuses[current.device.deviceId] ?: VictronLinkStatus.WAITING,

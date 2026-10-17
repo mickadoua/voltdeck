@@ -11,6 +11,7 @@ import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.KnownDevice
 import app.voltdeck.drivers.jbd.JbdDriver
+import app.voltdeck.drivers.victron.CachingVictronKeyStore
 import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
 import app.voltdeck.drivers.victron.VictronInstantReadoutDriver
 import app.voltdeck.drivers.victron.VictronKeyStore
@@ -64,11 +65,14 @@ class RecordingTransport(private val inner: BleTransport) : BleTransport {
  */
 class DemoSession(
     val scenario: SimulationScenario,
-    val keys: VictronKeyStore,
+    keys: VictronKeyStore,
     real: Clock = Clock.System,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     jbdScenario: JbdScenario = JbdScenario.Nominal,
 ) {
+    /** Coffre mis en cache : le pilote lit la clé à chaque annonce, sans relire le Keystore/Keychain. */
+    val keys: VictronKeyStore = CachingVictronKeyStore(keys)
+
     private val simulatedClock = demoClock(real, zone)
     private val plant = SimulatedPlant(DEMO_SEED, simulatedClock.now(), zone)
     private val transport = RecordingTransport(

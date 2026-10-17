@@ -15,12 +15,14 @@ sealed interface KeyEntryOutcome {
 
 const val KEY_FORMAT_MESSAGE = "La clé fait 32 caractères hexadécimaux (16 octets) : chiffres 0 à 9 et lettres A à F."
 const val KEY_NOT_HEX_MESSAGE = "La clé ne contient que des chiffres 0 à 9 et des lettres A à F."
+const val KEY_SAVE_FAILED_MESSAGE =
+    "La clé est valide mais n'a pas pu être enregistrée dans le coffre sécurisé du téléphone. Réessayez."
 const val KEY_UNVERIFIABLE_MESSAGE =
     "Aucune annonce reçue de cet appareil : la clé ne peut pas être vérifiée. Rapprochez-vous de l'appareil et réessayez."
 
 /**
- * Saisie d'une clé d'annonce Victron : format (32 hexadécimaux), puis octet de contrôle comparé à la dernière annonce
- * reçue de l'appareil ([latestAdvertisement], donnée constructeur Victron), et seulement alors enregistrement dans [keys].
+ * Saisie d'une clé d'annonce Victron : format (32 hexadécimaux), puis déchiffrement d'essai de la dernière annonce
+ * reçue de l'appareil ([latestAdvertisement], donnée constructeur Victron) avec contrôle de vraisemblance, et seulement alors enregistrement dans [keys] (un échec du coffre donne un refus, jamais une exception).
  * La clé saisie n'est ni répétée dans un message ni journalisée.
  */
 fun enterVictronKey(
@@ -38,8 +40,12 @@ fun enterVictronKey(
     if (latestAdvertisement == null) return KeyEntryOutcome.Rejected(KEY_UNVERIFIABLE_MESSAGE)
     return when (VictronDecoder.checkKey(latestAdvertisement, key)) {
         VictronDecoder.KeyCheck.Matches -> {
-            keys.put(device, key)
-            KeyEntryOutcome.Saved
+            try {
+                keys.put(device, key)
+                KeyEntryOutcome.Saved
+            } catch (_: Exception) {
+                KeyEntryOutcome.Rejected(KEY_SAVE_FAILED_MESSAGE)
+            }
         }
         VictronDecoder.KeyCheck.Mismatch -> KeyEntryOutcome.Rejected(VictronDecoder.WRONG_KEY_MESSAGE)
         VictronDecoder.KeyCheck.NoUsableAdvertisement -> KeyEntryOutcome.Rejected(KEY_UNVERIFIABLE_MESSAGE)

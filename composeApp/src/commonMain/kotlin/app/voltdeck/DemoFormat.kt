@@ -2,8 +2,10 @@ package app.voltdeck
 
 import app.voltdeck.core.DeviceId
 import app.voltdeck.core.Metric
+import app.voltdeck.core.Reading
 import app.voltdeck.core.Sample
 import app.voltdeck.drivers.jbd.JbdProtectionFlag
+import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.simulator.SimulatedPlant
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -15,6 +17,11 @@ fun formatDecimal(value: Double, decimals: Int): String {
     val sign = if (value < 0 && scaled != 0L) "-" else ""
     if (decimals == 0) return "$sign$scaled"
     return "$sign${scaled / factor}.${(scaled % factor).toString().padStart(decimals, '0')}"
+}
+
+/** Retire la dernière mesure des appareils dont la clé est refusée : elle serait périmée, et trompeuse à l'écran. */
+fun dropWrongKeyReadings(latest: MutableMap<DeviceId, Reading>, statuses: Map<DeviceId, VictronLinkStatus>) {
+    statuses.forEach { (device, status) -> if (status == VictronLinkStatus.WRONG_KEY) latest.remove(device) }
 }
 
 fun deviceTitle(id: DeviceId): String = when (id) {

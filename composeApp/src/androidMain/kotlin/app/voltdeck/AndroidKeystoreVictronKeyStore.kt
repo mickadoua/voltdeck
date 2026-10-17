@@ -2,12 +2,15 @@ package app.voltdeck
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import app.voltdeck.core.DeviceId
 import app.voltdeck.drivers.victron.VictronKey
 import app.voltdeck.drivers.victron.VictronKeyStore
 import java.security.KeyStore
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -15,8 +18,10 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Clés d'annonce Victron chiffrées par une clé AES-GCM non exportable du Keystore Android. Seul le chiffré (IV + texte
- * chiffré, en Base64) est écrit dans des SharedPreferences : ni SQLite, ni journal. Si le Keystore a perdu sa clé
- * (restauration, réinitialisation), la clé Victron est considérée comme absente et l'utilisateur la ressaisit.
+ * chiffré, en Base64) est écrit dans des SharedPreferences : ni SQLite, ni journal. Si le Keystore a définitivement
+ * perdu sa clé (restauration, réinitialisation : étiquette GCM invalide, clé invalidée ou irrécupérable), la clé
+ * Victron est effacée et l'utilisateur la ressaisit. Toute autre erreur est traitée comme transitoire : absente
+ * pour cette lecture, mais jamais effacée.
  */
 class AndroidKeystoreVictronKeyStore(context: Context) : VictronKeyStore {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
@@ -33,10 +38,21 @@ class AndroidKeystoreVictronKeyStore(context: Context) : VictronKeyStore {
             } finally {
                 plain.fill(0)
             }
+        } catch (_: AEADBadTagException) {
+            discard(device)
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            discard(device)
+        } catch (_: UnrecoverableKeyException) {
+            discard(device)
         } catch (_: Exception) {
-            prefs.edit().remove(device.value).commit()
+            // Panne transitoire (Keystore occupé, appareil verrouillé…) : la clé de l'utilisateur est conservée.
             null
         }
+    }
+
+    private fun discard(device: DeviceId): VictronKey? {
+        prefs.edit().remove(device.value).commit()
+        return null
     }
 
     override fun put(device: DeviceId, key: VictronKey) {

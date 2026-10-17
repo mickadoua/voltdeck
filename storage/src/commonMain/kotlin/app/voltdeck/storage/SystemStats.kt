@@ -113,7 +113,7 @@ class SystemStats(database: VoltdeckDatabase) {
     fun autonomy(now: Instant, maxAge: Duration = 10.minutes): Stat {
         val shunt = activeDevices(DeviceRole.SHUNT, now, now).firstOrNull()
         if (shunt != null) {
-            val timeToGo = freshLatest(SeriesKey(shunt.id, Metric.TIME_TO_GO), now, maxAge)
+            val timeToGo = freshLatest(SeriesKey(shunt.deviceId, Metric.TIME_TO_GO), now, maxAge)
             if (timeToGo != null) return Stat(timeToGo.stats.last / 60.0, "h", Nature.DEVICE_COMPUTED)
         }
         val window = now - 25.hours
