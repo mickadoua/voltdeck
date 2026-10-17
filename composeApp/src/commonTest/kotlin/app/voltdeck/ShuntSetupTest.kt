@@ -46,4 +46,17 @@ class ShuntSetupTest {
         assertEquals("−2,1", signedFr(-2.1, 1))
         assertEquals("0,0", signedFr(0.0, 1))
     }
+
+    @Test
+    fun aDcMeterAnnouncesWhereItIsWired() {
+        fun meter(type: Double) = app.voltdeck.core.Reading(
+            app.voltdeck.core.DeviceId("s"), kotlin.time.Instant.fromEpochSeconds(0),
+            listOf(app.voltdeck.core.Sample(app.voltdeck.core.Metric.METER_TYPE, value = type)),
+        )
+        assertEquals(ShuntSetup(ShuntPlacement.LOAD, Circuit.FRIDGE), detectedSetup(meter(3.0)))
+        assertEquals(ShuntSetup(ShuntPlacement.SOURCE, Circuit.ALTERNATOR), detectedSetup(meter(-6.0)))
+        assertEquals("Chargeur DC-DC", detectedSetup(meter(-3.0))!!.displayName)
+        assertEquals(ShuntPlacement.SOURCE, detectedSetup(meter(-3.0))!!.placement)
+        assertNull(detectedSetup(null))
+    }
 }

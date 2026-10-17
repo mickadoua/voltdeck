@@ -14,7 +14,8 @@ import app.voltdeck.core.DeviceRole
 enum class VictronRecordType(val code: Int, val role: DeviceRole, val minPayloadBytes: Int) {
     SOLAR_CHARGER(0x01, DeviceRole.SOLAR_CHARGER, minPayloadBytes = 12),
     BATTERY_MONITOR(0x02, DeviceRole.SHUNT, minPayloadBytes = 15),
-    DCDC_CONVERTER(0x04, DeviceRole.DCDC, minPayloadBytes = 10);
+    DCDC_CONVERTER(0x04, DeviceRole.DCDC, minPayloadBytes = 10),
+    DC_ENERGY_METER(0x0D, DeviceRole.SHUNT, minPayloadBytes = 11);
 
     companion object {
         fun fromCode(code: Int): VictronRecordType? = entries.firstOrNull { it.code == code }

@@ -59,7 +59,7 @@ class SimulatedLinkException(message: String) : IllegalStateException(message)
 /**
  * BMS JBD simulé : fabrique de vraies trames de réponse (DD … 77, somme de contrôle `0x10000 − Σ`) à partir de la
  * batterie du [SimulatedPlant]. Écrit indépendamment du décodeur du pilote, pour que les tests croisent les deux.
- * Valeurs synthétiques : aucune ne vient du matériel du fondateur.
+ * Valeurs synthétiques : aucune ne vient d'un matériel réel.
  */
 internal class SimulatedJbdBms(
     private val plant: SimulatedPlant,

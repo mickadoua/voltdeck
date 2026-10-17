@@ -121,4 +121,14 @@ class OverviewTest {
         val o = buildOverview(listOf(bms), mapOf(bmsReading), setups())
         assertEquals(0.0, o.consumption!!.watts)
     }
+
+    @Test
+    fun withoutAShuntTheAutonomyIsTheHistoryEstimateLabelledAsSuch() {
+        val discharging = reading(bms, Metric.BATTERY_VOLTAGE to 13.0, Metric.BATTERY_CURRENT to -4.0, Metric.SOC to 60.0)
+        val o = buildOverview(listOf(bms), mapOf(discharging), setups(), estimatedAutonomyHours = 20.5)
+        assertEquals(1230.0, o.autonomy.minutes)
+        assertTrue(o.autonomy.estimated)
+        val charging = buildOverview(listOf(bms), mapOf(bmsReading), setups(), estimatedAutonomyHours = 20.5)
+        assertEquals(AutonomyGap.CHARGING, charging.autonomy.gap)
+    }
 }

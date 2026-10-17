@@ -11,6 +11,7 @@ import app.voltdeck.core.DeviceId
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Reading
 import app.voltdeck.drivers.KnownDevice
+import app.voltdeck.drivers.jbd.JbdCounters
 import app.voltdeck.drivers.jbd.JbdDriver
 import app.voltdeck.drivers.victron.CachingVictronKeyStore
 import app.voltdeck.drivers.victron.InMemoryVictronKeyStore
@@ -24,6 +25,7 @@ import app.voltdeck.simulator.SimulatedTransport
 import app.voltdeck.simulator.SimulatedVictron
 import app.voltdeck.simulator.SimulationScenario
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
@@ -32,12 +34,16 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 const val DEMO_SPEED = 60.0
-private const val DEMO_SEED = 1L
+internal const val DEMO_SEED = 1L
+
+// Une demi-seconde réelle = 30 s simulées : sous l’écart maximal d’intégration de l’énergie (60 s), malgré la gigue.
+val DEMO_PERIOD = 500.milliseconds
 
 /** Début de la journée simulée : 06 h 30 locale du jour courant, juste avant le lever du soleil simulé. */
 fun demoStart(now: Instant, zone: TimeZone): Instant =
@@ -86,11 +92,12 @@ class DemoSession(
     val keys: VictronKeyStore = CachingVictronKeyStore(keys)
 
     private val simulatedClock = demoClock(real, zone)
+    override val clock: Clock get() = simulatedClock
     private val plant = SimulatedPlant(DEMO_SEED, simulatedClock.now(), zone)
     private val transport = RecordingTransport(
-        SimulatedTransport(DEMO_SEED, scenario = scenario, jbdScenario = jbdScenario, clock = simulatedClock, zone = zone, plant = plant),
+        SimulatedTransport(DEMO_SEED, advertisementPeriod = DEMO_PERIOD, scenario = scenario, jbdScenario = jbdScenario, clock = simulatedClock, zone = zone, plant = plant),
     )
-    private val batteryDriver = JbdDriver(simulatedClock, pollInterval = 1.seconds)
+    private val batteryDriver = JbdDriver(simulatedClock, pollInterval = DEMO_PERIOD)
 
     val driver = VictronInstantReadoutDriver(keys, simulatedClock)
     val battery = KnownDevice(SimulatedPlant.BATTERY_ID, SimulatedTransport.BATTERY_ID, DeviceRole.BATTERY)
@@ -103,6 +110,18 @@ class DemoSession(
     override val linkStatus: StateFlow<Map<DeviceId, VictronLinkStatus>> get() = driver.diagnostics.status
 
     override fun title(id: DeviceId): String = deviceTitle(id)
+
+    override val jbdCounters: StateFlow<Map<DeviceId, JbdCounters>> get() = batteryDriver.counters
+
+    override val truncatedVictronFrames: Int get() = driver.diagnostics.truncatedFrames
+
+    override val scanError: StateFlow<String?> = MutableStateFlow(null)
+
+    override fun records(): List<RegisteredDevice> = listOf(
+        RegisteredDevice(battery.deviceId, JbdDriver.DRIVER_ID, DeviceRole.BATTERY, battery.platformId, deviceTitle(battery.deviceId), null),
+        RegisteredDevice(mppt.deviceId, VictronInstantReadoutDriver.DRIVER_ID, DeviceRole.SOLAR_CHARGER, mppt.platformId, deviceTitle(mppt.deviceId), null),
+        RegisteredDevice(shunt.deviceId, VictronInstantReadoutDriver.DRIVER_ID, DeviceRole.SHUNT, shunt.platformId, deviceTitle(shunt.deviceId), null),
+    )
 
     init {
         victronDevices.forEach { keys.put(it.deviceId, SimulatedVictron.TEST_KEY) }

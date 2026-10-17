@@ -154,7 +154,7 @@ private fun BatteryCard(o: Overview, modifier: Modifier) {
                     autonomy.minutes != null -> {
                         val m = autonomy.minutes.toLong()
                         Txt("Autonomie ${m / 60} h ${(m % 60).toString().padStart(2, '0')}", 13.sp, color = p.ink2)
-                        Tag("shunt")
+                        Tag(if (autonomy.estimated) "estimée" else "shunt")
                     }
                     autonomy.gap == AutonomyGap.CHARGING -> Txt("Autonomie : $DASH (en charge)", 13.sp, color = p.ink2)
                     else -> Txt("Autonomie : $DASH", 13.sp, color = p.ink2)

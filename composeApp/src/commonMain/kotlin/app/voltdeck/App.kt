@@ -55,13 +55,18 @@ import app.voltdeck.drivers.victron.VictronDecoder
 import app.voltdeck.drivers.victron.VictronKeyStore
 import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.simulator.SimulationScenario
+import app.voltdeck.storage.Nature
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.toLocalDateTime
 
 private sealed interface Screen {
     data object Overview : Screen
+    data object Stats : Screen
     data object Devices : Screen
     data object AddDevice : Screen
+    data object Diagnostic : Screen
     data class Shunt(val device: KnownDevice) : Screen
 }
 
@@ -73,24 +78,33 @@ fun App(
     bluetooth: BluetoothAccess = AlwaysGrantedBluetooth,
     transport: (() -> BleTransport)? = null,
 ) {
-    var scenario by remember { mutableStateOf(SimulationScenario.SUNNY_DAY) }
-    var demo by remember { mutableStateOf(transport == null || registry.all().isEmpty()) }
-    var registryVersion by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val runtime = remember { VoltdeckRuntime(keys, shuntSetups, registry, transport, null, scope).also { it.start() } }
+    App(runtime, bluetooth)
+}
+
+@Composable
+fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: BackgroundCollection = NoBackgroundCollection) {
     var darkOverride by remember { mutableStateOf<Boolean?>(null) }
     val dark = darkOverride ?: isSystemInDarkTheme()
-
-    val scope = rememberCoroutineScope()
-    val live = remember(keys, registry) { transport?.let { LiveSession(it(), keys, registry, scope) } }
-    val demoSession = remember(scenario, keys) { DemoSession(scenario, keys) }
-    val session: Session = if (demo || live == null) demoSession else live
-
-    val latest = remember(session, registryVersion) { mutableStateMapOf<DeviceId, Reading>() }
-    LaunchedEffect(session, registryVersion) { session.readings().collect { latest[it.deviceId] = it } }
+    val live = runtime.live
+    val session by runtime.session.collectAsState()
+    val latest by runtime.latest.collectAsState()
+    val changes by runtime.changes.collectAsState()
     val statuses by session.linkStatus.collectAsState()
-    LaunchedEffect(session, statuses) { dropWrongKeyReadings(latest, statuses) }
-    val savedSetups = remember(shuntSetups) { mutableStateMapOf<DeviceId, ShuntSetup>() }
-    val devices = remember(session, registryVersion) { session.devices }
-    val setupOf = { id: DeviceId -> savedSetups[id] ?: shuntSetups.get(id) ?: ShuntSetup.DEFAULT }
+    val devices = remember(session, changes) { session.devices }
+    val setupOf = { id: DeviceId -> runtime.setupOf(id) }
+    var estimatedAutonomy by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(session, changes) {
+        while (true) {
+            estimatedAutonomy = runtime.stats()?.autonomy(session.clock.now())?.takeIf { it.nature == Nature.ESTIMATED }?.value
+            delay(1.minutes)
+        }
+    }
+    val overview = remember(latest, devices, changes, estimatedAutonomy) { buildOverview(devices, latest, setupOf, estimatedAutonomy) }
+    var backgroundEnabled by remember { mutableStateOf(background.enabled) }
+    val collectInBackground = session !is DemoSession && devices.isNotEmpty()
+    LaunchedEffect(collectInBackground, backgroundEnabled, changes) { background.sync(collectInBackground) }
 
     var screen by remember { mutableStateOf<Screen>(Screen.Overview) }
 
@@ -101,37 +115,44 @@ fun App(
                 is Screen.Shunt -> ShuntScreen(
                     title = session.title(current.device.deviceId),
                     status = statuses[current.device.deviceId] ?: VictronLinkStatus.WAITING,
+                    announced = runtime.announcedSetup(current.device.deviceId),
                     initial = setupOf(current.device.deviceId),
                     onBack = { screen = Screen.Devices },
                     onSave = {
-                        shuntSetups.put(current.device.deviceId, it)
-                        savedSetups[current.device.deviceId] = it
+                        runtime.saveSetup(current.device.deviceId, it)
                         screen = Screen.Overview
                     },
                 )
+                Screen.Diagnostic -> DiagnosticScreen(runtime) { screen = Screen.Devices }
                 Screen.AddDevice -> if (live != null) {
                     AddDeviceScreen(live, bluetooth, onBack = { screen = Screen.Devices }, onAdded = {
-                        registryVersion++
-                        demo = false
+                        runtime.setDemo(false)
+                        runtime.devicesChanged()
                         screen = Screen.Devices
                     })
                 }
                 else -> {
                     TopBar(
-                        title = if (current == Screen.Overview) "Vue d'ensemble" else "Équipements",
+                        title = when (current) {
+                            Screen.Overview -> "Vue d'ensemble"
+                            Screen.Stats -> "Statistiques"
+                            else -> "Équipements"
+                        },
                         subtitle = "${devices.size} équipement${if (devices.size > 1) "s" else ""} · lecture seule",
                         demo = session is DemoSession,
                         dark = dark,
                         onToggleTheme = { darkOverride = !dark },
                     )
                     Box(Modifier.weight(1f)) {
-                        if (current == Screen.Overview) {
+                        if (current == Screen.Stats) {
+                            StatsScreen(runtime)
+                        } else if (current == Screen.Overview) {
                             if (devices.isEmpty()) {
                                 EmptyState { screen = Screen.AddDevice }
                             } else {
                                 Column(Modifier.fillMaxSize()) {
                                     if (session is DemoSession && live != null) DemoBanner { screen = Screen.AddDevice }
-                                    OverviewContent(buildOverview(devices, latest, setupOf), Modifier.weight(1f))
+                                    OverviewContent(overview, Modifier.weight(1f))
                                 }
                             }
                         } else {
@@ -141,13 +162,19 @@ fun App(
                                 latest = latest,
                                 statuses = statuses,
                                 setupOf = setupOf,
-                                onMode = { demo = it },
-                                onScenario = { scenario = it },
+                                onMode = { runtime.setDemo(it) },
+                                onScenario = { runtime.setScenario(it) },
                                 onShunt = { screen = Screen.Shunt(it) },
                                 onAdd = { screen = Screen.AddDevice },
+                                onDiagnostic = { screen = Screen.Diagnostic },
                                 onRemove = { id ->
                                     live?.remove(id)
-                                    registryVersion++
+                                    runtime.devicesChanged()
+                                },
+                                backgroundOn = if (background.supported) backgroundEnabled else null,
+                                onBackground = {
+                                    background.enabled = it
+                                    backgroundEnabled = it
                                 },
                             )
                         }
@@ -217,7 +244,7 @@ private fun TabBar(current: Screen, onSelect: (Screen) -> Unit) {
         Modifier.fillMaxWidth().background(p.surface).padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        listOf(Screen.Overview to "Accueil", Screen.Devices to "Équipements").forEach { (target, label) ->
+        listOf(Screen.Overview to "Accueil", Screen.Stats to "Statistiques", Screen.Devices to "Équipements").forEach { (target, label) ->
             val active = current == target
             Box(
                 Modifier
@@ -249,7 +276,10 @@ private fun DevicesScreen(
     onScenario: (SimulationScenario) -> Unit,
     onShunt: (KnownDevice) -> Unit,
     onAdd: () -> Unit,
+    onDiagnostic: () -> Unit,
     onRemove: (DeviceId) -> Unit,
+    backgroundOn: Boolean?,
+    onBackground: (Boolean) -> Unit,
 ) {
     val p = LocalPalette.current
     val isDemo = session is DemoSession
@@ -275,6 +305,17 @@ private fun DevicesScreen(
             Txt("Clé des appareils simulés (publique, TEST ONLY) : ${session.deviceKeyHex}", 12.sp, color = p.muted)
         } else {
             PrimaryButton("Ajouter un équipement", Modifier.fillMaxWidth(), onAdd)
+            if (backgroundOn != null) {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Txt("Collecte écran éteint", 16.sp, FontWeight.Bold)
+                            Txt("Voltdeck continue de lire et d'enregistrer avec une notification. Sinon, la collecte s'arrête avec l'application.", 13.sp, color = p.ink2)
+                        }
+                        Choice(if (backgroundOn) "Activée" else "Désactivée", backgroundOn) { onBackground(!backgroundOn) }
+                    }
+                }
+            }
             if (session is LiveSession) {
                 val error by session.scanError.collectAsState()
                 error?.let { Pill(it, Tone.WARN) }
@@ -290,6 +331,7 @@ private fun DevicesScreen(
                 if (!isDemo) SecondaryButton("Retirer cet équipement", Modifier.fillMaxWidth()) { onRemove(device.deviceId) }
             }
         }
+        SecondaryButton("Diagnostic", Modifier.fillMaxWidth(), onDiagnostic)
         if (!isDemo && session.devices.isNotEmpty()) {
             Txt("Batterie JBD : connexion automatique, et reconnexion après une coupure. Victron : écoute des annonces, sans connexion.", 13.sp, color = p.muted)
         }
