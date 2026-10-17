@@ -18,9 +18,18 @@ import kotlin.time.Instant
  *   écrit qu'une fois, et une écriture qui échoue est retentée au flush suivant sans rien perdre ni doubler.
  * - Une minute qui n'a pas été écrite quand l'app est tuée est perdue (moins d'une minute) ; son `count` plus bas le montre.
  *
+ * Avec [bucket] = [Level.HOUR], les mêmes cumuls sont écrits directement dans les heures : pour importer un long historique
+ * sans des millions de lignes minute.
+ *
  * Non thread-safe : le collecteur appelle [add] et les flush depuis une seule coroutine.
  */
-class MinuteAggregator(private val database: VoltdeckDatabase) {
+class MinuteAggregator(private val database: VoltdeckDatabase, private val bucket: Level = Level.MINUTE) {
+    init {
+        require(bucket == Level.MINUTE || bucket == Level.HOUR) { "niveau $bucket non pris en charge" }
+    }
+
+    private val step = if (bucket == Level.MINUTE) MINUTE_SECONDS else HOUR_SECONDS
+
     private data class Slot(val minute: Long, val deviceId: String, val metric: Metric, val channel: Int)
 
     private class Chains {
@@ -37,7 +46,7 @@ class MinuteAggregator(private val database: VoltdeckDatabase) {
      * les relevés arrivent dans l'ordre.
      */
     fun add(reading: Reading) {
-        val minute = reading.at.minuteStart()
+        val minute = floorTo(reading.at.epochSeconds, step)
         val id = reading.deviceId.value
         for (sample in reading.samples) {
             if (sample.metric in DERIVED_METRICS) continue
@@ -48,7 +57,7 @@ class MinuteAggregator(private val database: VoltdeckDatabase) {
     }
 
     /** Écrit les minutes closes à l'instant [now] (à appeler périodiquement quand plus aucun relevé n'arrive). */
-    fun flushClosed(now: Instant) = flushBefore(now.minuteStart())
+    fun flushClosed(now: Instant) = flushBefore(floorTo(now.epochSeconds, step))
 
     /** Écrit tout, minute en cours comprise (arrêt propre). Un relevé tardif de cette minute sera fusionné. */
     fun flushAll() = flushBefore(Long.MAX_VALUE)
@@ -73,23 +82,23 @@ class MinuteAggregator(private val database: VoltdeckDatabase) {
         val id = reading.deviceId.value
         if (current != null) {
             device.ampere.add(reading.at, current) { minute, positive, negative ->
-                accumulate(Slot(minute, id, Metric.CHARGE_IN_AH, 0), positive / 3600.0)
-                accumulate(Slot(minute, id, Metric.CHARGE_OUT_AH, 0), negative / 3600.0)
+                accumulate(Slot(floorTo(minute, step), id, Metric.CHARGE_IN_AH, 0), positive / 3600.0)
+                accumulate(Slot(floorTo(minute, step), id, Metric.CHARGE_OUT_AH, 0), negative / 3600.0)
             }
         } else {
             device.ampere.reset()
         }
         if (current != null && voltage != null) {
             device.watt.add(reading.at, current * voltage) { minute, positive, negative ->
-                accumulate(Slot(minute, id, Metric.ENERGY_IN_WH, 0), positive / 3600.0)
-                accumulate(Slot(minute, id, Metric.ENERGY_OUT_WH, 0), negative / 3600.0)
+                accumulate(Slot(floorTo(minute, step), id, Metric.ENERGY_IN_WH, 0), positive / 3600.0)
+                accumulate(Slot(floorTo(minute, step), id, Metric.ENERGY_OUT_WH, 0), negative / 3600.0)
             }
         } else {
             device.watt.reset()
         }
         if (pv != null) {
             device.photovoltaic.add(reading.at, pv) { minute, positive, _ ->
-                accumulate(Slot(minute, id, Metric.PV_ENERGY_WH, 0), positive / 3600.0)
+                accumulate(Slot(floorTo(minute, step), id, Metric.PV_ENERGY_WH, 0), positive / 3600.0)
             }
         } else {
             device.photovoltaic.reset()
@@ -108,16 +117,27 @@ class MinuteAggregator(private val database: VoltdeckDatabase) {
     }
 
     private fun persist(slot: Slot, stats: AggStats) {
-        val queries = database.minuteQueries
-        val existing = queries.selectMinuteOne(slot.deviceId, slot.metric.name, slot.channel.toLong(), slot.minute).executeAsOneOrNull()
-        val merged = if (existing == null) {
-            stats
+        val channel = slot.channel.toLong()
+        val merged = stored(slot)?.merge(stats) ?: stats
+        if (bucket == Level.MINUTE) {
+            database.minuteQueries.upsertMinute(
+                slot.deviceId, slot.metric.name, channel, slot.minute, merged.count, merged.min, merged.max, merged.sum, merged.last,
+            )
         } else {
-            AggStats(existing.count, existing.min, existing.max, existing.sum, existing.last).merge(stats)
+            database.hourQueries.upsertHour(
+                slot.deviceId, slot.metric.name, channel, slot.minute, merged.count, merged.min, merged.max, merged.sum, merged.last,
+            )
         }
-        queries.upsertMinute(
-            slot.deviceId, slot.metric.name, slot.channel.toLong(), slot.minute,
-            merged.count, merged.min, merged.max, merged.sum, merged.last,
-        )
+    }
+
+    private fun stored(slot: Slot): AggStats? {
+        val channel = slot.channel.toLong()
+        return if (bucket == Level.MINUTE) {
+            database.minuteQueries.selectMinuteOne(slot.deviceId, slot.metric.name, channel, slot.minute).executeAsOneOrNull()
+                ?.let { AggStats(it.count, it.min, it.max, it.sum, it.last) }
+        } else {
+            database.hourQueries.selectHourOne(slot.deviceId, slot.metric.name, channel, slot.minute).executeAsOneOrNull()
+                ?.let { AggStats(it.count, it.min, it.max, it.sum, it.last) }
+        }
     }
 }

@@ -135,4 +135,18 @@ class MinuteAggregatorTest {
         aggregator.flushAll()
         assertTrue(minutes(Metric.CHARGE_IN_AH).isEmpty())
     }
+
+    @Test
+    fun hourlyBucketsGetTheSameEnergyWithoutMinuteRows() {
+        val aggregator = MinuteAggregator(db, Level.HOUR)
+        for (m in 0..120) {
+            aggregator.add(reading(BMS, t0 + m.minutes, Metric.BATTERY_VOLTAGE to 12.0, Metric.BATTERY_CURRENT to 10.0))
+        }
+        aggregator.flushAll()
+        assertTrue(minutes(Metric.ENERGY_IN_WH).isEmpty())
+        val hours = db.stored(Level.HOUR, BMS, Metric.ENERGY_IN_WH)
+        assertEquals(listOf(t0, t0 + 60.minutes), hours.map { it.start })
+        assertEquals(240.0, hours.sumOf { it.stats.sum }, 1e-9)
+        assertEquals(60L, db.stored(Level.HOUR, BMS, Metric.BATTERY_VOLTAGE).first().stats.count)
+    }
 }
