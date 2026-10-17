@@ -1,9 +1,13 @@
 package app.voltdeck
 
+import app.voltdeck.core.DeviceId
 import app.voltdeck.core.Metric
+import app.voltdeck.core.Reading
 import app.voltdeck.core.Sample
+import app.voltdeck.drivers.victron.VictronLinkStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Instant
 
 class DemoFormatTest {
     @Test
@@ -47,5 +51,15 @@ class DemoFormatTest {
     @Test
     fun victronDevicesHaveATitle() {
         assertEquals("SmartShunt (simulé)", deviceTitle(app.voltdeck.simulator.SimulatedPlant.SHUNT_ID))
+    }
+
+    @Test
+    fun wrongKeyDevicesLoseTheirLastReading() {
+        val a = DeviceId("a")
+        val b = DeviceId("b")
+        val reading = { id: DeviceId -> Reading(id, Instant.fromEpochSeconds(1), listOf(Sample(Metric.SOC, value = 50.0))) }
+        val latest = mutableMapOf(a to reading(a), b to reading(b))
+        dropWrongKeyReadings(latest, mapOf(a to VictronLinkStatus.WRONG_KEY, b to VictronLinkStatus.OK))
+        assertEquals(setOf(b), latest.keys)
     }
 }

@@ -64,6 +64,7 @@ fun DemoModeScreen(session: DemoSession, onScenario: (SimulationScenario) -> Uni
     val latest = remember(session) { mutableStateMapOf<DeviceId, Reading>() }
     LaunchedEffect(session) { session.readings().collect { latest[it.deviceId] = it } }
     val statuses by session.driver.diagnostics.status.collectAsState()
+    LaunchedEffect(session, statuses) { dropWrongKeyReadings(latest, statuses) }
 
     Column(
         Modifier
