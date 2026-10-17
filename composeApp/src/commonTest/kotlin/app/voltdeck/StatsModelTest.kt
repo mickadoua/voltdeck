@@ -48,4 +48,38 @@ class StatsModelTest {
         assertEquals(1.0, niceCeiling(0.0))
         assertEquals(20.0, niceCeiling(17.0))
     }
+
+    @Test
+    fun aCompletedPeriodIsComparedWholeToThePreviousOne() {
+        val october = StatsPeriod(PeriodKind.MONTH, LocalDate(2026, 10, 10))
+        val (current, previous) = comparableDays(october, today = LocalDate(2026, 11, 3))
+        assertEquals(31, current.size)
+        assertEquals(30, previous.size)
+        assertEquals(LocalDate(2026, 9, 1), previous.first())
+    }
+
+    @Test
+    fun anUnfinishedPeriodIsComparedOnItsFinishedDaysOnly() {
+        val october = StatsPeriod(PeriodKind.MONTH, friday)
+        val (current, previous) = comparableDays(october, today = friday)
+        assertEquals(15, current.size)
+        assertEquals(LocalDate(2026, 10, 15), current.last())
+        assertEquals(15, previous.size)
+        assertEquals(LocalDate(2026, 9, 15), previous.last())
+    }
+
+    @Test
+    fun theDayInProgressHasNothingToCompare() {
+        val (current, previous) = comparableDays(StatsPeriod(PeriodKind.DAY, friday), today = friday)
+        assertTrue(current.isEmpty())
+        assertTrue(previous.isEmpty())
+    }
+
+    @Test
+    fun aShorterPreviousMonthLimitsBothSides() {
+        val march = StatsPeriod(PeriodKind.MONTH, LocalDate(2026, 3, 31))
+        val (current, previous) = comparableDays(march, today = LocalDate(2026, 3, 31))
+        assertEquals(28, previous.size)
+        assertEquals(28, current.size)
+    }
 }

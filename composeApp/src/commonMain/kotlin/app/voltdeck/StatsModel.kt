@@ -85,8 +85,8 @@ data class StatsData(
     val buckets: List<EnergyBucket>,
     val produced: EnergyTotal?,
     val consumed: EnergyTotal?,
-    val previousProduced: EnergyTotal?,
-    val previousConsumed: EnergyTotal?,
+    val producedComparison: Comparison?,
+    val consumedComparison: Comparison?,
     val soc: List<AggRow>,
     val socMin: Extremum?,
     val socMax: Extremum?,
@@ -98,6 +98,21 @@ data class StatsData(
 fun variation(current: EnergyTotal?, previous: EnergyTotal?): Double? {
     if (current == null || previous == null || previous.kwh <= 0.0) return null
     return (current.kwh - previous.kwh) / previous.kwh * 100.0
+}
+
+/** Variation sur [days] jours ; [partial] quand la période en cours n'est pas terminée et que seuls ses premiers jours sont comparés. */
+data class Comparison(val percent: Double, val days: Int, val partial: Boolean)
+
+/**
+ * Jours à comparer : toute la période si elle est terminée, sinon ses seuls jours terminés face aux
+ * mêmes premiers jours de la période précédente (jamais une période entamée contre une période complète).
+ */
+fun comparableDays(period: StatsPeriod, today: LocalDate): Pair<List<LocalDate>, List<LocalDate>> {
+    val previousDays = period.previous().days
+    if (period.days.last() < today) return period.days to previousDays
+    val finished = period.days.filter { it < today }
+    val n = minOf(finished.size, previousDays.size)
+    return finished.take(n) to previousDays.take(n)
 }
 
 fun loadStats(
@@ -114,14 +129,14 @@ fun loadStats(
     val to = minOf(period.endExclusive.atStartOfDayIn(zone), now)
     val level = if (period.kind == PeriodKind.DAY) Level.HOUR else Level.DAY
 
-    fun produced(p: StatsPeriod): EnergyTotal? {
-        val days = p.days.filter { it <= today }.map { stats.solarProduction(it, zone) }.filter { it.value != null }
+    fun produced(dates: List<LocalDate>): EnergyTotal? {
+        val days = dates.filter { it <= today }.map { stats.solarProduction(it, zone) }.filter { it.value != null }
         if (days.isEmpty()) return null
         return EnergyTotal(days.sumOf { it.value!! }, days.any { it.nature == Nature.CALCULATED }, null)
     }
 
-    fun consumed(p: StatsPeriod): EnergyTotal? {
-        val days = p.days.filter { it <= today }.map { stats.consumption(it, zone, now) }.filter { it.value != null }
+    fun consumed(dates: List<LocalDate>): EnergyTotal? {
+        val days = dates.filter { it <= today }.map { stats.consumption(it, zone, now) }.filter { it.value != null }
         if (days.isEmpty()) return null
         return EnergyTotal(days.sumOf { it.value!! } / 1000.0, true, days.mapNotNull { it.coverage }.average().takeIf { !it.isNaN() })
     }
@@ -131,14 +146,19 @@ fun loadStats(
     fun min(rows: List<AggRow>) = rows.minByOrNull { it.stats.min }?.let { Extremum(it.stats.min, it.start) }
     fun max(rows: List<AggRow>) = rows.maxByOrNull { it.stats.max }?.let { Extremum(it.stats.max, it.start) }
 
+    val (currentDays, previousDays) = comparableDays(period, today)
+    val partial = currentDays.size < period.days.size
+    fun comparison(current: EnergyTotal?, previous: EnergyTotal?) =
+        variation(current, previous)?.let { Comparison(it, currentDays.size, partial) }
+
     return StatsData(
         period = period,
         level = level,
         buckets = if (to > from) history.buckets(level, from, to, zone) else emptyList(),
-        produced = produced(period),
-        consumed = consumed(period),
-        previousProduced = produced(period.previous()),
-        previousConsumed = consumed(period.previous()),
+        produced = produced(period.days),
+        consumed = consumed(period.days),
+        producedComparison = comparison(produced(currentDays), produced(previousDays)),
+        consumedComparison = comparison(consumed(currentDays), consumed(previousDays)),
         soc = soc,
         socMin = min(soc),
         socMax = max(soc),

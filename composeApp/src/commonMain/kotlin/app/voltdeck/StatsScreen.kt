@@ -118,8 +118,8 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TotalCard("Production", d.produced, d.previousProduced, p.solar, SunIcon, Modifier.weight(1f))
-            TotalCard("Consommation", d.consumed, d.previousConsumed, p.load, PlugIcon, Modifier.weight(1f))
+            TotalCard("Production", d.produced, d.producedComparison, p.solar, SunIcon, Modifier.weight(1f))
+            TotalCard("Consommation", d.consumed, d.consumedComparison, p.load, PlugIcon, Modifier.weight(1f))
         }
 
         Card(Modifier.fillMaxWidth()) {
@@ -175,14 +175,17 @@ private fun slotLabel(at: Instant, level: Level, zone: TimeZone): String {
 }
 
 @Composable
-private fun TotalCard(title: String, total: EnergyTotal?, previous: EnergyTotal?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
+private fun TotalCard(title: String, total: EnergyTotal?, comparison: Comparison?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
     val p = LocalPalette.current
     Card(modifier, radius = 18.dp, padding = 14.dp) {
         TileHeader(title, color, icon)
         Value(total?.let { frDecimal(it.kwh, 2) } ?: DASH, "kWh", 26.sp)
         if (total != null && total.calculated) Tag("calculée")
         total?.coverage?.takeIf { it < 0.99 }?.let { Txt("Couverture ${frDecimal(it * 100, 0)} %", 12.sp, color = p.muted) }
-        variation(total, previous)?.let { Txt("${signedFr(it, 0)} % vs période précédente", 12.sp, FontWeight.SemiBold, p.ink2) }
+        comparison?.let {
+            val against = if (it.partial) "les ${it.days} premiers jours de la période précédente" else "la période précédente"
+            Txt("${signedFr(it.percent, 0)} % vs $against", 12.sp, FontWeight.SemiBold, p.ink2)
+        }
     }
 }
 
