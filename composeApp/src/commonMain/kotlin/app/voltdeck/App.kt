@@ -55,7 +55,10 @@ import app.voltdeck.drivers.victron.VictronDecoder
 import app.voltdeck.drivers.victron.VictronKeyStore
 import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.simulator.SimulationScenario
+import app.voltdeck.storage.Nature
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.toLocalDateTime
 
 private sealed interface Screen {
@@ -90,7 +93,14 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
     val statuses by session.linkStatus.collectAsState()
     val devices = remember(session, changes) { session.devices }
     val setupOf = { id: DeviceId -> runtime.setupOf(id) }
-    val overview = remember(latest, devices, changes) { buildOverview(devices, latest, setupOf) }
+    var estimatedAutonomy by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(session, changes) {
+        while (true) {
+            estimatedAutonomy = runtime.stats()?.autonomy(session.clock.now())?.takeIf { it.nature == Nature.ESTIMATED }?.value
+            delay(1.minutes)
+        }
+    }
+    val overview = remember(latest, devices, changes, estimatedAutonomy) { buildOverview(devices, latest, setupOf, estimatedAutonomy) }
     var backgroundEnabled by remember { mutableStateOf(background.enabled) }
     val collectInBackground = session !is DemoSession && devices.isNotEmpty()
     LaunchedEffect(collectInBackground, backgroundEnabled, changes) { background.sync(collectInBackground) }
