@@ -41,6 +41,13 @@ class DemoFormatTest {
     }
 
     @Test
+    fun unnamedProtectionBitIsNeverShownAsNone() {
+        assertEquals("Alarme inconnue", protectionText(0x2000))
+        assertEquals("Alarme inconnue", sampleText(Sample(Metric.PROTECTION_FLAGS, value = 0x8000.toDouble())))
+        assertEquals("surtension cellule", protectionText(0x2001))
+    }
+
+    @Test
     fun relayStateTellsWhichDirectionIsCut() {
         assertEquals("Charge et décharge actives", relayText(3))
         assertEquals("Charge coupée", relayText(2))

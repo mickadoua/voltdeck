@@ -233,6 +233,19 @@ class JbdDriverTest {
     }
 
     @Test
+    fun anAllZeroBasicInfoFrameGivesNoReadingAndIsCounted() = runTest {
+        val body = byteArrayOf(0x00, 23) + ByteArray(23)
+        val sum = (0x10000 - body.sumOf { it.toInt() and 0xFF }) and 0xFFFF
+        val zeros = byteArrayOf(0xDD.toByte(), 0x03) + body + byteArrayOf((sum shr 8).toByte(), sum.toByte(), 0x77)
+        val driver = JbdDriver(virtualClock())
+        val got = mutableListOf<Reading>()
+        driver.readings(device, ScriptedTransport({ scriptedLink(basic = { listOf(zeros) }) })).onEach { got += it }.launchIn(backgroundScope)
+        advanceTimeBy(60.seconds)
+        assertTrue(got.isEmpty())
+        assertTrue(assertNotNull(driver.counters.value[deviceId]).rejectedFrames >= 1)
+    }
+
+    @Test
     fun aLateFrameForAnotherRegisterIsIgnored() = runTest {
         val link = scriptedLink(basic = { chunk(cellsFrame, 20) + chunk(basicFrame, 20) })
         val reading = JbdDriver(virtualClock()).readings(device, ScriptedTransport({ link })).take(1).toList().single()

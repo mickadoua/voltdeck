@@ -245,4 +245,38 @@ class JbdFramesTest {
         data[2] = 0x01; data[3] = 0x2C
         assertEquals(3.0, JbdBasicInfo.decode(data).currentA)
     }
+
+    @Test
+    fun strayStartByteBeforeAValidFrameDoesNotLoseIt() {
+        val assembler = JbdFrameAssembler()
+        val responses = assembler.feed(byteArrayOf(0xDD.toByte(), 0x00) + cellsFrame)
+        assertEquals(1, responses.size)
+        assertEquals(0x04, responses.single().register)
+        assertTrue(responses.single().isOk)
+        assertTrue(assembler.rejectedFrames > 0)
+    }
+
+    @Test
+    fun strayStartByteWithALongBogusLengthResyncsOnceEnoughBytesArrive() {
+        val assembler = JbdFrameAssembler()
+        val noise = byteArrayOf(0xDD.toByte(), 0x00, 0x00, 0x08)
+        val responses = feedAll(assembler, chunks(noise + cellsFrame, 5))
+        assertEquals(listOf(0x04), responses.map { it.register })
+    }
+
+    @Test
+    fun allZeroBasicInfoFrameIsRejectedInsteadOfDecodedAsADeadBattery() {
+        val zeros = frame(0x03, 0, ByteArray(23))
+        val response = JbdFrameAssembler().feed(zeros).single()
+        assertFailsWith<JbdDecodeException> { JbdBasicInfo.decode(response.data) }
+    }
+
+    @Test
+    fun basicInfoWithZeroVoltageOrZeroCellsIsRejected() {
+        val base = JbdFrameAssembler().feed(basicFrame).single().data
+        val noVoltage = base.copyOf().also { it[0] = 0; it[1] = 0 }
+        val noCells = base.copyOf().also { it[21] = 0 }
+        assertFailsWith<JbdDecodeException> { JbdBasicInfo.decode(noVoltage) }
+        assertFailsWith<JbdDecodeException> { JbdBasicInfo.decode(noCells) }
+    }
 }

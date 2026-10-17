@@ -68,6 +68,8 @@ class JbdBasicInfo(
             if (data.size < MIN_DATA + 2 * ntc) {
                 throw JbdDecodeException("registre 0x03 tronqué : $ntc sondes annoncées, ${data.size} octets")
             }
+            // Une trame à zéro a une somme valide mais ne mesure rien : ne pas la prendre pour une batterie à 0 V.
+            if (data.u16(0) == 0 || data.u8(21) == 0) throw JbdDecodeException("registre 0x03 vide : tension ou nombre de cellules à zéro")
             return JbdBasicInfo(
                 voltageV = data.u16(0) / 100.0,
                 currentA = data.s16(2) / 100.0,

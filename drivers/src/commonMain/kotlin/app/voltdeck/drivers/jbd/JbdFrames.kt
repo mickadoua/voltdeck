@@ -50,8 +50,17 @@ class JbdFrameAssembler {
     var rejectedFrames: Int = 0
         private set
 
+    private var discarding = false
+
     fun reset() {
         buffer = ByteArray(0)
+        discarding = false
+    }
+
+    /** Une série d'octets écartés d'affilée ne compte qu'une fois, jusqu'à la prochaine trame valide. */
+    private fun reject() {
+        if (!discarding) rejectedFrames++
+        discarding = true
     }
 
     fun feed(chunk: ByteArray): List<JbdResponse> {
@@ -60,21 +69,27 @@ class JbdFrameAssembler {
         while (true) {
             val start = buffer.indexOfFirst { (it.toInt() and 0xFF) == JbdProtocol.START }
             if (start < 0) {
-                if (buffer.isNotEmpty()) rejectedFrames++
+                if (buffer.isNotEmpty()) reject()
                 buffer = ByteArray(0)
                 break
             }
             if (start > 0) {
-                rejectedFrames++
+                reject()
                 buffer = buffer.copyOfRange(start, buffer.size)
             }
             if (buffer.size < 4) break
             val total = (buffer[3].toInt() and 0xFF) + JbdProtocol.OVERHEAD
             if (buffer.size < total) break
-            val frame = buffer.copyOfRange(0, total)
-            buffer = buffer.copyOfRange(total, buffer.size)
-            val response = parse(frame)
-            if (response == null) rejectedFrames++ else out += response
+            val response = parse(buffer.copyOfRange(0, total))
+            if (response == null) {
+                // Ce DD n'ouvrait pas une vraie trame : ne jeter que lui, la vraie trame peut suivre dans le tampon.
+                reject()
+                buffer = buffer.copyOfRange(1, buffer.size)
+            } else {
+                discarding = false
+                out += response
+                buffer = buffer.copyOfRange(total, buffer.size)
+            }
         }
         return out
     }

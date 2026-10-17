@@ -42,7 +42,11 @@ fun sampleLabel(sample: Sample): String = when (sample.metric) {
 /** Alarmes de protection du BMS JBD (bits du registre 0x03, voir [JbdProtectionFlag]). */
 fun protectionText(mask: Int): String {
     val active = JbdProtectionFlag.active(mask)
-    return if (active.isEmpty()) "Aucune" else active.joinToString(", ") { it.frenchLabel() }
+    return when {
+        active.isNotEmpty() -> active.joinToString(", ") { it.frenchLabel() }
+        mask != 0 -> "Alarme inconnue"
+        else -> "Aucune"
+    }
 }
 
 /** Relais du BMS JBD : bit 0 = charge, bit 1 = décharge (registre 0x03, octet d'état des FET). */
