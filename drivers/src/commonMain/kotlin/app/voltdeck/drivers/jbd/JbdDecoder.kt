@@ -17,7 +17,8 @@ class JbdDecodeException(message: String) : RuntimeException(message)
 /**
  * Registre 0x03. Les mesures hors plage physique sont omises de [samples] (jamais ramenées à 0).
  *
- * Choix de lecture : l'octet d'état des FET (décalage 20) n'est lu que par ses deux bits bas (charge, décharge).
+ * Choix de lecture : l'octet d'état des FET (décalage 20) est stocké brut, sans masque ; seul l'affichage
+ * (`relayText`) n'en lit que les deux bits bas (charge, décharge).
  * esphome-jbd-bms signale un bit 0x80 « unités de 0,1 A / 0,1 Ah » que patman15/aiobmsble ignore ; il n'est pas
  * appliqué ici tant qu'une capture du matériel ne le montre pas (sinon les courants seraient faux d'un facteur 10).
  */
@@ -34,7 +35,7 @@ class JbdBasicInfo(
     /** Octet de version logicielle brut (0x10 = 1.0). */
     val softwareVersion: Int,
     val socPercent: Int,
-    /** Bit 0 = FET de charge fermé, bit 1 = FET de décharge fermé. */
+    /** Octet brut, non masqué. Bit 0 = FET de charge fermé, bit 1 = FET de décharge fermé ; les autres bits sont conservés tels quels. */
     val fetMask: Int,
     val cellCount: Int,
     val temperaturesC: List<Double>,
@@ -81,7 +82,7 @@ class JbdBasicInfo(
                 protectionMask = data.u16(16),
                 softwareVersion = data.u8(18),
                 socPercent = data.u8(19),
-                fetMask = data.u8(20) and 0x03,
+                fetMask = data.u8(20),
                 cellCount = data.u8(21),
                 temperaturesC = List(ntc) { (data.u16(23 + 2 * it) - 2731) / 10.0 },
             )

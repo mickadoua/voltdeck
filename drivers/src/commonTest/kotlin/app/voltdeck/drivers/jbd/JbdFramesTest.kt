@@ -57,6 +57,16 @@ class JbdFramesTest {
     }
 
     @Test
+    fun fetByteIsStoredRawIncludingReservedBits() {
+        val base = JbdFrameAssembler().feed(basicFrame).single().data
+        val data = base.copyOf().also { it[20] = 0x83.toByte() }
+        val info = JbdBasicInfo.decode(data)
+        assertEquals(0x83, info.fetMask)
+        val fet = info.toSamples().single { it.metric == Metric.FET_STATE }
+        assertEquals(131.0, fet.value)
+    }
+
+    @Test
     fun bmsNeverEmitsTheChargerDeviceState() {
         val data = JbdFrameAssembler().feed(basicFrame).single().data
         assertTrue(JbdBasicInfo.decode(data).toSamples().none { it.metric == Metric.DEVICE_STATE })
