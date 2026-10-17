@@ -3,6 +3,7 @@ package app.voltdeck.simulator
 import app.voltdeck.ble.Adv
 import app.voltdeck.ble.AllowedCommand
 import app.voltdeck.ble.BleTransport
+import app.voltdeck.ble.ConnectionLedger
 import app.voltdeck.ble.ConnectionPolicy
 import app.voltdeck.ble.GattProfile
 import app.voltdeck.ble.PlatformDeviceId
@@ -49,7 +50,8 @@ class SimulatedTransport(
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink {
         val template = templates.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
-        ConnectionPolicy.requireConnectable(template.toAdv(rssi = -60))
+        val ledger = ConnectionLedger().apply { record(template.toAdv(rssi = -60)) }
+        ledger.requireConnectable(id, profile)
         return SimulatedGattLink()
     }
 

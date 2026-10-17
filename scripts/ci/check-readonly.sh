@@ -46,6 +46,12 @@ scan "écriture BLE" "$WRITE_PATTERN" "$ALLOWED" "${sources[@]}"
 scan "API Bluetooth hors du transport" "$BLE_API_PATTERN" "$ALLOWED" "${sources[@]}"
 scan "dépendance Kable hors de ble/" "$KABLE_DEP_PATTERN" "$KABLE_GRADLE_ALLOWED" "${gradle_files[@]}"
 
+# Le transport réel doit passer par le registre des annonces avant toute connexion (refus Victron, profil connu).
+if [ -f "$ALLOWED" ] && ! grep -qF 'ledger.requireConnectable(' "$ALLOWED"; then
+  echo "ECHEC lecture seule (garde de connexion) : $ALLOWED n'appelle plus ledger.requireConnectable(" >&2
+  status=1
+fi
+
 if [ "$status" -ne 0 ]; then
   echo "Seul $ALLOWED peut écrire ou toucher l'API Bluetooth." >&2
   exit 1

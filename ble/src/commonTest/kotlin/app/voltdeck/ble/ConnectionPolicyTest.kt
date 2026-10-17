@@ -35,4 +35,45 @@ class ConnectionPolicyTest {
         assertContentEquals(byteArrayOf(1, 2, 3), adv.manufacturerData.getValue(0x1234))
         assertFalse("SERIAL-HQ2345" in adv.toString())
     }
+
+    private val jbdService = listOf(GattProfile.Jbd.serviceUuid)
+
+    @Test
+    fun deviceThatOnceAdvertisedVictronStaysRefusedAfterLaterPlainAdvertisements() {
+        val ledger = ConnectionLedger()
+        ledger.record(Adv(id, null, -60, mapOf(ConnectionPolicy.VICTRON_COMPANY_ID to byteArrayOf(1)), jbdService))
+        ledger.record(Adv(id, null, -60, serviceUuids = jbdService))
+        assertFailsWith<ForbiddenConnectionException> { ledger.requireConnectable(id, GattProfile.Jbd) }
+    }
+
+    @Test
+    fun deviceThatNeverAdvertisedTheProfileServiceIsRefused() {
+        val ledger = ConnectionLedger()
+        ledger.record(Adv(id, "voisin", -60, serviceUuids = listOf("0000180f-0000-1000-8000-00805f9b34fb")))
+        assertFailsWith<ForbiddenConnectionException> { ledger.requireConnectable(id, GattProfile.Jbd) }
+    }
+
+    @Test
+    fun serviceSeenInAnEarlierAdvertisementRemainsValid() {
+        val ledger = ConnectionLedger()
+        ledger.record(Adv(id, null, -60, serviceUuids = jbdService))
+        ledger.record(Adv(id, null, -60))
+        ledger.requireConnectable(id, GattProfile.Jbd)
+    }
+
+    @Test
+    fun unknownDeviceIsRefused() {
+        assertFailsWith<IllegalStateException> { ConnectionLedger().requireConnectable(id, GattProfile.Jbd) }
+    }
+
+    @Test
+    fun trimForgetsTheOldestDevice() {
+        val ledger = ConnectionLedger()
+        val old = PlatformDeviceId("old")
+        ledger.record(Adv(old, null, -60, serviceUuids = jbdService))
+        ledger.record(Adv(id, null, -60, serviceUuids = jbdService))
+        ledger.trim(1)
+        assertFailsWith<IllegalStateException> { ledger.requireConnectable(old, GattProfile.Jbd) }
+        ledger.requireConnectable(id, GattProfile.Jbd)
+    }
 }

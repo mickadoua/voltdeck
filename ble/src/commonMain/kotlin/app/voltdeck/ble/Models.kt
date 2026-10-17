@@ -86,3 +86,45 @@ object ConnectionPolicy {
         }
     }
 }
+
+/**
+ * Mémoire des annonces vues, par équipement, pour décider d'une connexion sur tout l'historique du scan et non
+ * sur la dernière annonce. Liste d'autorisés : on ne se connecte qu'à un équipement qui a déjà annoncé le service
+ * du [GattProfile] demandé, et jamais à un équipement qui a, une seule fois, annoncé le Company ID Victron.
+ * Non synchronisée : l'appelant sérialise les accès.
+ */
+class ConnectionLedger {
+    private class Facts {
+        var victron = false
+        val services = HashSet<String>()
+    }
+
+    private val facts = LinkedHashMap<PlatformDeviceId, Facts>()
+
+    fun record(adv: Adv) {
+        val entry = facts.remove(adv.id) ?: Facts()
+        facts[adv.id] = entry
+        if (ConnectionPolicy.VICTRON_COMPANY_ID in adv.manufacturerData) entry.victron = true
+        adv.serviceUuids.mapTo(entry.services) { it.lowercase() }
+    }
+
+    /** Oublie les équipements les plus anciennement vus au-delà de [max]. */
+    fun trim(max: Int) {
+        while (facts.size > max) facts.remove(facts.keys.first())
+    }
+
+    fun requireConnectable(id: PlatformDeviceId, profile: GattProfile) {
+        val entry = facts[id]
+            ?: throw IllegalStateException("Équipement inconnu : il faut l'avoir vu en scan avant de se connecter")
+        if (entry.victron) {
+            throw ForbiddenConnectionException(
+                "Victron : Voltdeck ne se connecte jamais, il écoute seulement les annonces",
+            )
+        }
+        if (profile.serviceUuid.lowercase() !in entry.services) {
+            throw ForbiddenConnectionException(
+                "Cet équipement n'a jamais annoncé le service du profil demandé : connexion refusée",
+            )
+        }
+    }
+}

@@ -21,10 +21,9 @@ import kotlin.uuid.Uuid
  */
 @OptIn(ExperimentalUuidApi::class)
 class KableTransport : BleTransport {
-    private class Seen(val advertisement: Advertisement, val adv: Adv)
-
-    // Plus ancien en premier : les adresses Android tournent, la table ne doit pas grossir sans limite.
-    private val seen = LinkedHashMap<PlatformDeviceId, Seen>()
+    // Plus ancien en premier : les adresses Android tournent, les tables ne doivent pas grossir sans limite.
+    private val seen = LinkedHashMap<PlatformDeviceId, Advertisement>()
+    private val ledger = ConnectionLedger()
     private val seenLock = Mutex()
 
     override fun advertisements(filter: ScanFilter): Flow<Adv> {
@@ -41,22 +40,25 @@ class KableTransport : BleTransport {
             val adv = advertisement.toAdv()
             seenLock.withLock {
                 seen.remove(adv.id)
-                seen[adv.id] = Seen(advertisement, adv)
+                seen[adv.id] = advertisement
+                ledger.record(adv)
                 while (seen.size > MAX_SEEN) seen.remove(seen.keys.first())
+                ledger.trim(MAX_SEEN)
             }
             adv
         }
     }
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink {
-        val seenDevice = seenLock.withLock { seen[id] }
-            ?: throw IllegalStateException("Équipement inconnu : il faut l'avoir vu en scan avant de se connecter")
-        ConnectionPolicy.requireConnectable(seenDevice.adv)
+        val advertisement = seenLock.withLock {
+            ledger.requireConnectable(id, profile)
+            seen[id]
+        } ?: throw IllegalStateException("Équipement inconnu : il faut l'avoir vu en scan avant de se connecter")
         val service = Uuid.parse(profile.serviceUuid)
         val notify = characteristicOf(service, Uuid.parse(profile.notifyCharacteristicUuid))
         val request = characteristicOf(service, Uuid.parse(profile.requestCharacteristicUuid))
         val writeType = if (profile.requestWithResponse) WriteType.WithResponse else WriteType.WithoutResponse
-        val peripheral = Peripheral(seenDevice.advertisement)
+        val peripheral = Peripheral(advertisement)
         try {
             peripheral.connect()
             return GuardedGattLink(

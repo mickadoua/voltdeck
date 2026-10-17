@@ -23,7 +23,7 @@ KT=ble/src/commonMain/kotlin/app/voltdeck/ble/KableTransport.kt
 fresh() {
   rm -rf "$tmp/repo"
   mkdir -p "$tmp/repo/ble/src/commonMain/kotlin/app/voltdeck/ble" "$tmp/repo/drivers/src" "$tmp/repo/drivers/src/commonTest"
-  printf 'import com.juul.kable.Peripheral\nclass T { fun f(p: P) { p.%s(1) } }\n' write > "$tmp/repo/$KT"
+  printf 'import com.juul.kable.Peripheral\nclass T { fun f(p: P) { ledger.requireConnectable(i); p.%s(1) } }\n' write > "$tmp/repo/$KT"
   printf 'dependencies { implementation(libs.kable.core) }\n' > "$tmp/repo/ble/build.gradle.kts"
   printf 'class D\n' > "$tmp/repo/drivers/src/D.kt"
 }
@@ -79,6 +79,8 @@ put drivers/build/generated/G.kt 'val x = p.%s(1)\n' $W
 expect 0 "readonly : le dossier build/ d'un module est ignoré" "$RO" "$tmp/repo"
 put drivers/src/W.kt 'val x = 1\n'
 expect 0 "readonly : retour à un dépôt propre" "$RO" "$tmp/repo"
+printf 'class T { fun f(p: P) { p.%s(1) } }\n' write > "$tmp/repo/$KT"
+expect 1 "readonly : le transport réel n'appelle plus la garde de connexion" "$RO" "$tmp/repo"
 
 fresh
 expect 0 "secrets : dépôt propre" "$SE" "$tmp/repo"
@@ -116,6 +118,14 @@ printf 'binaire %s fin\n' "$hex32" > "$tmp/repo/drivers/src/blob.bin"
 printf '\000\001\002' >> "$tmp/repo/drivers/src/blob.bin"
 rm -f "$tmp/repo/drivers/src/K.kt"
 expect 1 "secrets : fichier binaire contenant 32 hex" "$SE" "$tmp/repo"
+rm -f "$tmp/repo/drivers/src/blob.bin"
+put drivers/src/commonMain/kotlin/FooTest/P.kt '// TEST ONLY\nval k = "%s"\n' "$hex32"
+expect 1 "secrets : un dossier FooTest hors jeu de sources de test n'est pas exempté" "$SE" "$tmp/repo"
+rm -rf "$tmp/repo/drivers/src/commonMain"
+put .claude/settings.local.json '{"k": "%s"}\n' "$hex32"
+expect 1 "secrets : le dossier .claude/ est contrôlé" "$SE" "$tmp/repo"
+rm -rf "$tmp/repo/.claude"
+expect 0 "secrets : retour à un dépôt propre" "$SE" "$tmp/repo"
 
 if [ "$failures" -ne 0 ]; then echo "$failures vérification(s) en échec" >&2; exit 1; fi
 echo "selftest OK"
