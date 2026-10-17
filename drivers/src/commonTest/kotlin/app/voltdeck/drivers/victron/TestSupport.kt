@@ -53,3 +53,13 @@ internal object Vectors {
     const val DCDC_ADV = "1000c0a304121d64ca8d442b90bbdf6a8cba"
     const val DCDC_KEY = "64ba49f1a8562e45197a8e1fe50d7658"
 }
+
+/** DC energy meter (0x0D) : keshavdv/victron-ble (Unlicense), tests/test_dc_energy_meter.py. Même clé de test publique que le moniteur de batterie. */
+internal object DcMeterVectors {
+    const val ADV = "100289a30d787fafde83ccec982199fd815286"
+    const val KEY = Vectors.BATTERY_MONITOR_KEY
+    const val PLAIN_DCDC_STARTER = "fdffe4040000ffff00000059a65a1c8c"
+    const val PLAIN_TEMPERATURE_NONE = "fdffe4040000ffff020000ae28af8a5c"
+    const val PLAIN_TEMPERATURE = "fdffe40400008888020000ae28af8a5c"
+    const val PLAIN_GENERIC_SOURCE = "ffff6f0a0000000003000043698118eb"
+}

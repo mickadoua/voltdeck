@@ -36,6 +36,14 @@ enum class Metric(val unit: String) {
      * Autres bits réservés, conservés tels quels. Source JBD : registre 0x03, octet d'état des FET.
      */
     FET_STATE("bits"),
+
+    /**
+     * Victron « DC energy meter » : ce que mesure le shunt monté sur un circuit. Négatif = source (−9 solaire, −8 éolien,
+     * −7 générateur d'arbre, −6 alternateur, −5 pile à combustible, −4 hydrogénérateur, −3 DC-DC, −2 chargeur secteur,
+     * −1 source), positif = consommation (1 générique, 2 propulsion, 3 frigo, 4 pompe à eau, 5 pompe de cale,
+     * 6 système DC, 7 onduleur, 8 chauffe-eau).
+     */
+    METER_TYPE("code"),
     ERROR_CODE("code"),
     PROTECTION_FLAGS("bits"),
     ALARM_REASON("bits"),
