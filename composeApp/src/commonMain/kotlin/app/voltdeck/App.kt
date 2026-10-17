@@ -63,6 +63,7 @@ import kotlinx.datetime.toLocalDateTime
 
 private sealed interface Screen {
     data object Overview : Screen
+    data object Stats : Screen
     data object Devices : Screen
     data object AddDevice : Screen
     data object Diagnostic : Screen
@@ -131,14 +132,20 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                 }
                 else -> {
                     TopBar(
-                        title = if (current == Screen.Overview) "Vue d'ensemble" else "Équipements",
+                        title = when (current) {
+                            Screen.Overview -> "Vue d'ensemble"
+                            Screen.Stats -> "Statistiques"
+                            else -> "Équipements"
+                        },
                         subtitle = "${devices.size} équipement${if (devices.size > 1) "s" else ""} · lecture seule",
                         demo = session is DemoSession,
                         dark = dark,
                         onToggleTheme = { darkOverride = !dark },
                     )
                     Box(Modifier.weight(1f)) {
-                        if (current == Screen.Overview) {
+                        if (current == Screen.Stats) {
+                            StatsScreen(runtime)
+                        } else if (current == Screen.Overview) {
                             if (devices.isEmpty()) {
                                 EmptyState { screen = Screen.AddDevice }
                             } else {
@@ -236,7 +243,7 @@ private fun TabBar(current: Screen, onSelect: (Screen) -> Unit) {
         Modifier.fillMaxWidth().background(p.surface).padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        listOf(Screen.Overview to "Accueil", Screen.Devices to "Équipements").forEach { (target, label) ->
+        listOf(Screen.Overview to "Accueil", Screen.Stats to "Statistiques", Screen.Devices to "Équipements").forEach { (target, label) ->
             val active = current == target
             Box(
                 Modifier

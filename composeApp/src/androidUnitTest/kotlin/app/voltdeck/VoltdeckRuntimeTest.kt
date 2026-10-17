@@ -68,6 +68,13 @@ class VoltdeckRuntimeTest {
         val production = runtime.stats()!!.solarProduction(now.toLocalDateTime(TimeZone.UTC).date, TimeZone.UTC)
         assertNotEquals(Nature.UNAVAILABLE, production.nature, "production : $production")
         assertEquals(null, runtime.recorderState.value.error)
+
+        val today = now.toLocalDateTime(TimeZone.UTC).date
+        val stats = loadStats(runtime.stats()!!, runtime.energyHistory()!!, AggregateReader(db), SimulatedPlant.SHUNT_ID, StatsPeriod(PeriodKind.DAY, today), TimeZone.UTC, now)
+        assertTrue(stats.buckets.count { it.producedWh != null } >= 5, "${stats.buckets.size} heures")
+        assertTrue(stats.produced!!.kwh > 0.0)
+        assertTrue(stats.socMin!!.value <= stats.socMax!!.value)
+        assertTrue(stats.soc.isNotEmpty())
     }
 
     @Test
