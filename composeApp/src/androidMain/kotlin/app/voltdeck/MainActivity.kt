@@ -10,6 +10,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val keys = AndroidKeystoreVictronKeyStore(this)
-        setContent { App(keys) }
+        setContent { App(keys, AndroidShuntSetupStore(this)) }
     }
 }
