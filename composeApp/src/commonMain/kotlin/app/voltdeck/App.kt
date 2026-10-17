@@ -79,7 +79,7 @@ fun App(
 }
 
 @Composable
-fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess) {
+fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: BackgroundCollection = NoBackgroundCollection) {
     var darkOverride by remember { mutableStateOf<Boolean?>(null) }
     val dark = darkOverride ?: isSystemInDarkTheme()
     val live = runtime.live
@@ -90,6 +90,9 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess) {
     val devices = remember(session, changes) { session.devices }
     val setupOf = { id: DeviceId -> runtime.setupOf(id) }
     val overview = remember(latest, devices, changes) { buildOverview(devices, latest, setupOf) }
+    var backgroundEnabled by remember { mutableStateOf(background.enabled) }
+    val collectInBackground = session !is DemoSession && devices.isNotEmpty()
+    LaunchedEffect(collectInBackground, backgroundEnabled, changes) { background.sync(collectInBackground) }
 
     var screen by remember { mutableStateOf<Screen>(Screen.Overview) }
 
@@ -146,6 +149,11 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess) {
                                 onRemove = { id ->
                                     live?.remove(id)
                                     runtime.devicesChanged()
+                                },
+                                backgroundOn = if (background.supported) backgroundEnabled else null,
+                                onBackground = {
+                                    background.enabled = it
+                                    backgroundEnabled = it
                                 },
                             )
                         }
@@ -248,6 +256,8 @@ private fun DevicesScreen(
     onShunt: (KnownDevice) -> Unit,
     onAdd: () -> Unit,
     onRemove: (DeviceId) -> Unit,
+    backgroundOn: Boolean?,
+    onBackground: (Boolean) -> Unit,
 ) {
     val p = LocalPalette.current
     val isDemo = session is DemoSession
@@ -273,6 +283,17 @@ private fun DevicesScreen(
             Txt("Clé des appareils simulés (publique, TEST ONLY) : ${session.deviceKeyHex}", 12.sp, color = p.muted)
         } else {
             PrimaryButton("Ajouter un équipement", Modifier.fillMaxWidth(), onAdd)
+            if (backgroundOn != null) {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Txt("Collecte écran éteint", 16.sp, FontWeight.Bold)
+                            Txt("Voltdeck continue de lire et d'enregistrer avec une notification. Sinon, la collecte s'arrête avec l'application.", 13.sp, color = p.ink2)
+                        }
+                        Choice(if (backgroundOn) "Activée" else "Désactivée", backgroundOn) { onBackground(!backgroundOn) }
+                    }
+                }
+            }
             if (session is LiveSession) {
                 val error by session.scanError.collectAsState()
                 error?.let { Pill(it, Tone.WARN) }

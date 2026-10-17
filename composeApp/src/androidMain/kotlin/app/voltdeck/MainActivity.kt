@@ -16,6 +16,8 @@ class MainActivity : ComponentActivity() {
         pending = null
     }
 
+    private val notificationRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     private val bluetooth = object : BluetoothAccess {
         override fun granted() = BLUETOOTH_PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
@@ -28,7 +30,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { App((application as VoltdeckApplication).runtime, bluetooth) }
+        val background = AndroidBackgroundCollection(applicationContext) { bluetooth.granted() }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        setContent { App((application as VoltdeckApplication).runtime, bluetooth, background) }
     }
 
     private companion object {
