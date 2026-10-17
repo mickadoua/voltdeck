@@ -47,17 +47,26 @@ fun demoStart(now: Instant, zone: TimeZone): Instant =
 fun demoClock(real: Clock, zone: TimeZone = TimeZone.currentSystemDefault()): Clock =
     AcceleratedClock(real, demoStart(real.now(), zone), DEMO_SPEED)
 
-/** Transport qui laisse passer les annonces et retient la dernière donnée constructeur Victron de chaque appareil. */
+/** Transport qui laisse passer les annonces et retient les dernières données constructeur Victron distinctes de chaque appareil. */
 class RecordingTransport(private val inner: BleTransport) : BleTransport {
-    private val latest = HashMap<PlatformDeviceId, ByteArray>()
+    private val recent = HashMap<PlatformDeviceId, ArrayDeque<ByteArray>>()
 
-    fun latestVictronData(id: PlatformDeviceId): ByteArray? = latest[id]?.copyOf()
+    /** Jusqu'à [KEPT_FRAMES] annonces Victron distinctes, la plus récente en dernier. */
+    fun recentVictronData(id: PlatformDeviceId): List<ByteArray> = recent[id].orEmpty().map { it.copyOf() }
 
     override fun advertisements(filter: ScanFilter): Flow<Adv> = inner.advertisements(filter).onEach { adv ->
-        adv.manufacturerData[ConnectionPolicy.VICTRON_COMPANY_ID]?.let { latest[adv.id] = it.copyOf() }
+        val data = adv.manufacturerData[ConnectionPolicy.VICTRON_COMPANY_ID] ?: return@onEach
+        val frames = recent.getOrPut(adv.id) { ArrayDeque() }
+        if (frames.lastOrNull()?.contentEquals(data) == true) return@onEach
+        frames.addLast(data.copyOf())
+        while (frames.size > KEPT_FRAMES) frames.removeFirst()
     }
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink = inner.connect(id, profile)
+
+    companion object {
+        const val KEPT_FRAMES = 3
+    }
 }
 
 /**
@@ -110,7 +119,7 @@ class DemoSession(
 
     /** Vérifie puis enregistre la clé saisie pour [device]. Voir [enterVictronKey]. */
     override fun submitKey(device: KnownDevice, text: String): KeyEntryOutcome =
-        enterVictronKey(device.deviceId, text, transport.latestVictronData(device.platformId), keys)
+        enterVictronKey(device.deviceId, text, transport.recentVictronData(device.platformId), keys)
 }
 
 /** Flux de mesures du mode démo avec les clés simulées déjà saisies, accéléré ×[DEMO_SPEED]. */

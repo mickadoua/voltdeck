@@ -52,12 +52,17 @@ class VictronKeyTypoTest {
         }
     }
 
+    /**
+     * Sur une trame isolée, l'Orion n'a presque que deux tensions à contrôler : une coquille peut y passer. Sur trois
+     * trames distinctes, comme à la saisie de la clé, elle est refusée quel que soit l'octet touché.
+     */
     @Test
-    fun aTypoOnAnyByteAfterTheControlByteIsWrongKey() {
+    fun aTypoOnAnyByteAfterTheControlByteIsRefusedOverThreeDistinctFrames() {
         for (v in vectors) {
+            val frames = List(3) { withNonce(v.adv, v.key, 0x0200 + 37 * it) }
+            assertEquals(VictronDecoder.KeyCheck.Matches, VictronDecoder.checkKey(frames, keyOf(v.key)), v.name)
             for (byteIndex in 1 until VictronKey.SIZE_BYTES) {
-                val key = keyOf(typo(v.key, byteIndex))
-                assertEquals(VictronDecodeResult.WrongKey, VictronDecoder.decode(hex(v.adv), key), "${v.name}, octet $byteIndex")
+                assertEquals(VictronDecoder.KeyCheck.Mismatch, VictronDecoder.checkKey(frames, keyOf(typo(v.key, byteIndex))), "${v.name}, octet $byteIndex")
             }
         }
     }
@@ -104,8 +109,6 @@ class VictronKeyTypoTest {
     @Test
     fun solarBoundsAreEnforced() {
         val k = Vectors.SOLAR_KEY
-        assertWrong(VictronRecordType.SOLAR_CHARGER, solarPlain.with(0, 8), k, "état 8 inconnu")
-        assertWrong(VictronRecordType.SOLAR_CHARGER, solarPlain.with(1, 9), k, "erreur 9 inconnue")
         assertWrong(VictronRecordType.SOLAR_CHARGER, solarPlain.with(3, 0x1B).with(2, 0x59), k, "tension batterie 70,01 V")
         assertWrong(VictronRecordType.SOLAR_CHARGER, solarPlain.with(3, 0xFF).with(2, 0xF0), k, "tension batterie négative")
         assertWrong(VictronRecordType.SOLAR_CHARGER, solarPlain.with(5, 0x20).with(4, 0), k, "courant 819,2 A")
@@ -125,10 +128,20 @@ class VictronKeyTypoTest {
     @Test
     fun dcdcBoundsAreEnforced() {
         val k = Vectors.DCDC_KEY
-        assertWrong(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(0, 10), k, "état 10 inconnu")
-        assertWrong(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(1, 250), k, "erreur 250 inconnue")
         assertWrong(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(3, 0x7F).with(2, 0x00), k, "tension d'entrée > 100 V")
         assertWrong(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(5, 0x1B).with(4, 0x59), k, "tension de sortie 70,01 V")
+    }
+
+    /** Codes d'erreur et état d'une vraie installation, refusés à tort avant VOL-15 (source : keshavdv/victron-ble, devices/base.py). */
+    @Test
+    fun everyKnownStateAndErrorCodeIsAccepted() {
+        val errors = listOf(11, 14, 22, 23, 24) + (40..43) + (50..58) + (69..71) + (80..87) + listOf(205, 212, 215)
+        for (code in errors) {
+            assertIs<VictronDecodeResult.Decoded>(decodeTampered(VictronRecordType.SOLAR_CHARGER, solarPlain.with(1, code), Vectors.SOLAR_KEY), "MPPT, erreur $code")
+            assertIs<VictronDecodeResult.Decoded>(decodeTampered(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(1, code), Vectors.DCDC_KEY), "Orion, erreur $code")
+        }
+        assertIs<VictronDecodeResult.Decoded>(decodeTampered(VictronRecordType.SOLAR_CHARGER, solarPlain.with(0, 249), Vectors.SOLAR_KEY), "MPPT, état 249")
+        assertIs<VictronDecodeResult.Decoded>(decodeTampered(VictronRecordType.DCDC_CONVERTER, dcdcPlain.with(0, 249), Vectors.DCDC_KEY), "Orion, état 249")
     }
 
     @Test

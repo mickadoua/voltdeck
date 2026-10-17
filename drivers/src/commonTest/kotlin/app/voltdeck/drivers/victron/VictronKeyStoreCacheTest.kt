@@ -103,9 +103,9 @@ class VictronKeyStoreCacheTest {
         val shunt = KnownDevice(DeviceId("shunt-1"), platformId, DeviceRole.SHUNT)
         vault.inner.put(shunt.deviceId, keyOf(Vectors.BATTERY_MONITOR_KEY))
         val driver = VictronInstantReadoutDriver(CachingVictronKeyStore(vault), FixedClock)
-        val adv = Adv(platformId, "x", -60, mapOf(ConnectionPolicy.VICTRON_COMPANY_ID to hex(Vectors.BATTERY_MONITOR_ADV)))
-        val readings = driver.readings(shunt, ScriptedTransport(List(20) { adv })).toList()
-        assertEquals(20, readings.size)
+        val advs = shuntFrames(20).map { Adv(platformId, "x", -60, mapOf(ConnectionPolicy.VICTRON_COMPANY_ID to it)) }
+        val readings = driver.readings(shunt, ScriptedTransport(advs)).toList()
+        assertEquals(20 - VictronInstantReadoutDriver.PLAUSIBLE_STREAK + 1, readings.size)
         assertEquals(1, vault.gets)
     }
 

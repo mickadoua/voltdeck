@@ -58,13 +58,19 @@ object VictronDecoder {
     /**
      * Vérifie une clé saisie contre une annonce déjà reçue, avant de l'enregistrer : octet de contrôle, puis
      * déchiffrement d'essai et contrôle de vraisemblance (l'octet de contrôle seul laisse passer toute coquille
-     * hors de l'octet 0). Une mauvaise clé peut encore passer une fois sur plusieurs milliers : limite du protocole.
+     * hors de l'octet 0). Sur une seule trame, une mauvaise clé passe encore parfois (de l'ordre de 1 % pour un
+     * SmartShunt) : le pilote exige donc plusieurs trames plausibles d'affilée avant de déclarer la clé bonne.
      */
-    fun checkKey(manufacturerData: ByteArray, key: VictronKey): KeyCheck = when (decode(manufacturerData, key)) {
-        is VictronDecodeResult.Decoded -> KeyCheck.Matches
-        VictronDecodeResult.WrongKey -> KeyCheck.Mismatch
-        VictronDecodeResult.NotProductAdvertisement, VictronDecodeResult.Truncated, is VictronDecodeResult.UnsupportedRecord ->
-            KeyCheck.NoUsableAdvertisement
+    fun checkKey(manufacturerData: ByteArray, key: VictronKey): KeyCheck = checkKey(listOf(manufacturerData), key)
+
+    /** Comme [checkKey] sur plusieurs annonces distinctes : une seule invraisemblable suffit à refuser la clé. */
+    fun checkKey(advertisements: List<ByteArray>, key: VictronKey): KeyCheck {
+        val results = advertisements.map { decode(it, key) }
+        return when {
+            results.any { it == VictronDecodeResult.WrongKey } -> KeyCheck.Mismatch
+            results.any { it is VictronDecodeResult.Decoded } -> KeyCheck.Matches
+            else -> KeyCheck.NoUsableAdvertisement
+        }
     }
 
     enum class KeyCheck { Matches, Mismatch, NoUsableAdvertisement }

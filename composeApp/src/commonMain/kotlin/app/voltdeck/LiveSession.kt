@@ -132,7 +132,7 @@ class LiveSession(
     /** Victron : la clé est vérifiée sur une annonce reçue de l'appareil avant tout enregistrement. */
     fun addVictron(found: Found, name: String, keyText: String): AddOutcome {
         val id = newDeviceId()
-        return when (val outcome = enterVictronKey(id, keyText, scan.latestVictronData(found.candidate.platformId), keys)) {
+        return when (val outcome = enterVictronKey(id, keyText, scan.recentVictronData(found.candidate.platformId), keys)) {
             KeyEntryOutcome.Saved -> {
                 registry.add(RegisteredDevice(id, found.candidate.driverId, found.candidate.role, found.candidate.platformId, name, found.candidate.model))
                 AddOutcome.Added
@@ -156,7 +156,7 @@ class LiveSession(
     }
 
     override fun submitKey(device: KnownDevice, text: String): KeyEntryOutcome =
-        enterVictronKey(device.deviceId, text, scan.latestVictronData(device.platformId), keys)
+        enterVictronKey(device.deviceId, text, scan.recentVictronData(device.platformId), keys)
 
     @OptIn(ExperimentalUuidApi::class)
     private fun newDeviceId(): DeviceId = DeviceId(Uuid.random().toString())

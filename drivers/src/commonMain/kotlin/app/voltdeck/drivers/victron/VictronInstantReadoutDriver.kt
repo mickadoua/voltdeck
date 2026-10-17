@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlin.time.Clock
 
@@ -63,36 +63,69 @@ class VictronInstantReadoutDriver(
         return Candidate(DRIVER_ID, adv.id, type.role, model = "0x" + header.modelId.toString(16).uppercase().padStart(4, '0'))
     }
 
-    override fun readings(device: KnownDevice, transport: BleTransport): Flow<Reading> =
+    /**
+     * Une clé n'est déclarée bonne qu'après [PLAUSIBLE_STREAK] trames plausibles d'affilée : sur une trame isolée, une
+     * mauvaise clé passe parfois le contrôle de vraisemblance. Une trame refusée remet le compte à zéro.
+     */
+    override fun readings(device: KnownDevice, transport: BleTransport): Flow<Reading> = flow {
+        var streak = 0
+        var lastCounted: ByteArray? = null
         transport.advertisements(ScanFilter(companyId = ConnectionPolicy.VICTRON_COMPANY_ID))
             .filter { it.id == device.platformId }
-            .mapNotNull { adv -> decode(device, adv) }
+            .collect { adv ->
+                when (val step = decode(device, adv)) {
+                    is Step.Plausible -> {
+                        // Une annonce répétée à l'identique ne prouve rien de plus : seule une trame nouvelle compte.
+                        val data = adv.manufacturerData.getValue(ConnectionPolicy.VICTRON_COMPANY_ID)
+                        if (lastCounted?.contentEquals(data) != true) {
+                            streak++
+                            lastCounted = data
+                        }
+                        if (streak >= PLAUSIBLE_STREAK) {
+                            diagnostics.setStatus(device.deviceId, VictronLinkStatus.OK)
+                            step.reading?.let { emit(it) }
+                        }
+                    }
+                    Step.Rejected -> {
+                        streak = 0
+                        lastCounted = null
+                    }
+                    Step.Ignored -> Unit
+                }
+            }
+    }
 
-    private fun decode(device: KnownDevice, adv: Adv): Reading? {
-        val data = adv.manufacturerData[ConnectionPolicy.VICTRON_COMPANY_ID] ?: return null
+    private sealed interface Step {
+        class Plausible(val reading: Reading?) : Step
+        data object Rejected : Step
+        data object Ignored : Step
+    }
+
+    private fun decode(device: KnownDevice, adv: Adv): Step {
+        val data = adv.manufacturerData[ConnectionPolicy.VICTRON_COMPANY_ID] ?: return Step.Ignored
         val key = keys.get(device.deviceId)
         if (key == null) {
             diagnostics.setStatus(device.deviceId, VictronLinkStatus.NO_KEY)
-            return null
+            return Step.Rejected
         }
         return when (val result = VictronDecoder.decode(data, key)) {
-            is VictronDecodeResult.Decoded -> {
-                diagnostics.setStatus(device.deviceId, VictronLinkStatus.OK)
-                if (result.type.role == device.role && result.samples.isNotEmpty()) Reading(device.deviceId, clock.now(), result.samples) else null
-            }
+            is VictronDecodeResult.Decoded -> Step.Plausible(
+                if (result.type.role == device.role && result.samples.isNotEmpty()) Reading(device.deviceId, clock.now(), result.samples) else null,
+            )
             VictronDecodeResult.WrongKey -> {
                 diagnostics.setStatus(device.deviceId, VictronLinkStatus.WRONG_KEY)
-                null
+                Step.Rejected
             }
             VictronDecodeResult.Truncated -> {
                 diagnostics.frameTruncated()
-                null
+                Step.Ignored
             }
-            VictronDecodeResult.NotProductAdvertisement, is VictronDecodeResult.UnsupportedRecord -> null
+            VictronDecodeResult.NotProductAdvertisement, is VictronDecodeResult.UnsupportedRecord -> Step.Ignored
         }
     }
 
     companion object {
         const val DRIVER_ID = "victron.ir"
+        const val PLAUSIBLE_STREAK = 3
     }
 }

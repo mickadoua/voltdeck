@@ -27,6 +27,23 @@ internal fun decoded(data: ByteArray, key: VictronKey): VictronDecodeResult.Deco
     VictronDecoder.decode(data, key) as? VictronDecodeResult.Decoded
         ?: error("annonce non décodée")
 
+/** Le vecteur [advHex] re-chiffré avec un autre [nonce] : une trame distincte qui porte les mêmes mesures. */
+internal fun withNonce(advHex: String, keyHex: String, nonce: Int): ByteArray {
+    val data = hex(advHex)
+    val key = keyOf(keyHex)
+    val oldNonce = (data[5].toInt() and 0xFF) or ((data[6].toInt() and 0xFF) shl 8)
+    val plain = VictronCrypto.decryptFirstBlock(key, oldNonce, data.copyOfRange(8, data.size))
+    val out = data.copyOf()
+    out[5] = nonce.toByte()
+    out[6] = (nonce shr 8).toByte()
+    VictronCrypto.encryptFirstBlock(key, nonce, plain).copyInto(out, 8)
+    return out
+}
+
+/** [count] trames distinctes du SmartShunt de référence. */
+internal fun shuntFrames(count: Int): List<ByteArray> =
+    List(count) { withNonce(Vectors.BATTERY_MONITOR_ADV, Vectors.BATTERY_MONITOR_KEY, 0x0100 + it) }
+
 internal object Vectors {
     const val BATTERY_MONITOR_ADV = "100289a302b040af925d09a4d89aa0128bdef48c6298a9"
     const val BATTERY_MONITOR_KEY = "aff4d0995b7d1e176c0c33ecb9e70dcd"
