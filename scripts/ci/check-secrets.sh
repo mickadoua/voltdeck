@@ -6,7 +6,7 @@
 #  - forme UUID 8-4-4-4-12, sauf UUID Bluetooth standard (suffixe de la base 0000-1000-8000-00805f9b34fb)
 #    et identifiants factices du simulateur (préfixe 00000000-) ;
 #  - adresse MAC complète, séparée par « : » ou « - ».
-# Exemption : un fichier de test (chemin */src/*Test/*) qui contient la mention « TEST ONLY » (vecteurs publics).
+# Exemption : un fichier de test (chemin …/src/<jeu de sources>Test/…, le nom du jeu de sources sans « / ») qui contient la mention « TEST ONLY » (vecteurs publics).
 # Aucune exemption ailleurs, quel que soit le commentaire. Seul le chemin et la ligne sont affichés,
 # jamais le contenu (le journal de CI peut devenir public).
 # Usage : check-secrets.sh [racine-du-dépôt]
@@ -32,7 +32,7 @@ patterns=(
 UUID="${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}"
 
 is_test_file() {
-  case "$1" in */src/*Test/*) return 0 ;; *) return 1 ;; esac
+  [[ $1 =~ /src/[^/]*Test/ ]]
 }
 
 status=0

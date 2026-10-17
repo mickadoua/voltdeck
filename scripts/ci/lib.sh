@@ -11,5 +11,5 @@ repo_files() {
     else
       find . \( -path ./.git -o -path ./.gradle -o -path ./.kotlin -o -path ./.idea \) -prune -o -type f -print
     fi
-  } | grep -vE '^\./(\.claude/|([^/]+/)?build/)' | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done
+  } | grep -vE '^\./([^/]+/)?build/' | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done
 }

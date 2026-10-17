@@ -11,3 +11,6 @@ iosApp/build/
 xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
+
+# Réglages locaux des outils d'agent : jamais dans le dépôt
+.claude/
