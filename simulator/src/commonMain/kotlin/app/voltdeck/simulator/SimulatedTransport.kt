@@ -3,6 +3,7 @@ package app.voltdeck.simulator
 import app.voltdeck.ble.Adv
 import app.voltdeck.ble.AllowedCommand
 import app.voltdeck.ble.BleTransport
+import app.voltdeck.ble.ConnectionPolicy
 import app.voltdeck.ble.GattProfile
 import app.voltdeck.ble.PlatformDeviceId
 import app.voltdeck.ble.ReadAllowlist
@@ -38,7 +39,7 @@ class SimulatedTransport(
         while (true) {
             for ((index, template) in templates.withIndex()) {
                 val rssi = -55 - (abs(SimulatedPlant.unit(seed, index.toLong(), tick)) * 20).toInt()
-                val adv = Adv(template.id, template.name, rssi, template.manufacturerData, template.serviceUuids)
+                val adv = template.toAdv(rssi)
                 if (filter.matches(adv)) emit(adv)
             }
             tick++
@@ -47,8 +48,8 @@ class SimulatedTransport(
     }
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink {
-        require(id != MPPT_ID) { "Victron : Voltdeck ne se connecte jamais, il écoute seulement les annonces" }
-        require(id == BATTERY_ID) { "Équipement simulé inconnu" }
+        val template = templates.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
+        ConnectionPolicy.requireConnectable(template.toAdv(rssi = -60))
         return SimulatedGattLink()
     }
 
@@ -70,13 +71,15 @@ class SimulatedTransport(
         val name: String,
         val manufacturerData: Map<Int, ByteArray>,
         val serviceUuids: List<String>,
-    )
+    ) {
+        fun toAdv(rssi: Int) = Adv(id, name, rssi, manufacturerData, serviceUuids)
+    }
 
     companion object {
         val BATTERY_ID = PlatformDeviceId("sim-battery")
         val MPPT_ID = PlatformDeviceId("sim-mppt")
-        const val VICTRON_COMPANY_ID = 0x02E1
-        const val JBD_SERVICE_UUID = "0000ff00-0000-1000-8000-00805f9b34fb"
+        const val VICTRON_COMPANY_ID = ConnectionPolicy.VICTRON_COMPANY_ID
+        val JBD_SERVICE_UUID = GattProfile.Jbd.serviceUuid
 
         private val templates = listOf(
             Template(BATTERY_ID, "SIM-BATT", emptyMap(), listOf(JBD_SERVICE_UUID)),

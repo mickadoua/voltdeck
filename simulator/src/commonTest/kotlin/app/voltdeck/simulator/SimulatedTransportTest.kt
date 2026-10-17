@@ -2,6 +2,7 @@ package app.voltdeck.simulator
 
 import app.voltdeck.ble.AllowedCommand
 import app.voltdeck.ble.ForbiddenCommandException
+import app.voltdeck.ble.ForbiddenConnectionException
 import app.voltdeck.ble.GattProfile
 import app.voltdeck.ble.ReadAllowlist
 import app.voltdeck.ble.ScanFilter
@@ -15,11 +16,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class SimulatedTransportTest {
-    private val profile = GattProfile(
-        serviceUuid = SimulatedTransport.JBD_SERVICE_UUID,
-        notifyCharacteristicUuid = "0000ff01-0000-1000-8000-00805f9b34fb",
-        requestCharacteristicUuid = "0000ff02-0000-1000-8000-00805f9b34fb",
-    )
+    private val profile = GattProfile.Jbd
 
     private fun frame(vararg b: Int) = ByteArray(b.size) { b[it].toByte() }
 
@@ -65,8 +62,19 @@ class SimulatedTransportTest {
 
     @Test
     fun neverConnectsToAVictronDevice() = runTest {
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<ForbiddenConnectionException> {
             SimulatedTransport().connect(SimulatedTransport.MPPT_ID, profile)
         }
+    }
+
+    @Test
+    fun mutatingAnEmittedAdvertisementNeverAltersTheNextOnes() = runTest {
+        val advs = SimulatedTransport().advertisements(ScanFilter(companyId = SimulatedTransport.VICTRON_COMPANY_ID))
+            .take(3).toList()
+        val first = advs[0].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID)
+        val before = advs[1].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID).copyOf()
+        first.fill(0x7F)
+        assertContentEquals(before, advs[1].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID))
+        assertContentEquals(before, advs[2].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID))
     }
 }

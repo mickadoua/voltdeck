@@ -21,7 +21,10 @@ import kotlin.uuid.Uuid
  */
 @OptIn(ExperimentalUuidApi::class)
 class KableTransport : BleTransport {
-    private val seen = mutableMapOf<PlatformDeviceId, Advertisement>()
+    private class Seen(val advertisement: Advertisement, val adv: Adv)
+
+    // Plus ancien en premier : les adresses Android tournent, la table ne doit pas grossir sans limite.
+    private val seen = LinkedHashMap<PlatformDeviceId, Seen>()
     private val seenLock = Mutex()
 
     override fun advertisements(filter: ScanFilter): Flow<Adv> {
@@ -36,25 +39,35 @@ class KableTransport : BleTransport {
         }
         return scanner.advertisements.map { advertisement ->
             val adv = advertisement.toAdv()
-            seenLock.withLock { seen[adv.id] = advertisement }
+            seenLock.withLock {
+                seen.remove(adv.id)
+                seen[adv.id] = Seen(advertisement, adv)
+                while (seen.size > MAX_SEEN) seen.remove(seen.keys.first())
+            }
             adv
         }
     }
 
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink {
-        val advertisement = seenLock.withLock { seen[id] }
+        val seenDevice = seenLock.withLock { seen[id] }
             ?: throw IllegalStateException("Équipement inconnu : il faut l'avoir vu en scan avant de se connecter")
-        val peripheral = Peripheral(advertisement)
-        peripheral.connect()
+        ConnectionPolicy.requireConnectable(seenDevice.adv)
         val service = Uuid.parse(profile.serviceUuid)
         val notify = characteristicOf(service, Uuid.parse(profile.notifyCharacteristicUuid))
         val request = characteristicOf(service, Uuid.parse(profile.requestCharacteristicUuid))
         val writeType = if (profile.requestWithResponse) WriteType.WithResponse else WriteType.WithoutResponse
-        return GuardedGattLink(
-            notifications = peripheral.observe(notify),
-            sink = FrameSink { frame -> peripheral.write(request, frame, writeType) },
-            onClose = { peripheral.close() },
-        )
+        val peripheral = Peripheral(seenDevice.advertisement)
+        try {
+            peripheral.connect()
+            return GuardedGattLink(
+                notifications = peripheral.observe(notify),
+                sink = FrameSink { frame -> peripheral.write(request, frame, writeType) },
+                onClose = { peripheral.close() },
+            )
+        } catch (e: Throwable) {
+            peripheral.close()
+            throw e
+        }
     }
 
     private fun Advertisement.toAdv(): Adv {
@@ -66,6 +79,10 @@ class KableTransport : BleTransport {
             manufacturerData = if (manufacturer == null) emptyMap() else mapOf(manufacturer.code to manufacturer.data),
             serviceUuids = uuids.map { it.toString().lowercase() },
         )
+    }
+
+    private companion object {
+        const val MAX_SEEN = 256
     }
 }
 
