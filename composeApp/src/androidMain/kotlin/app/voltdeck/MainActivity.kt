@@ -9,6 +9,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { App() }
+        val keys = AndroidKeystoreVictronKeyStore(this)
+        setContent { App(keys) }
     }
 }

@@ -1,15 +1,9 @@
 package app.voltdeck
 
-import app.voltdeck.simulator.SimulatedPlant
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -22,13 +16,15 @@ class DemoSourceTest {
     }
 
     @Test
-    fun demoTimeRunsSixtyTimesFasterThanRealTime() = runTest {
+    fun demoTimeRunsSixtyTimesFasterThanRealTime() {
+        var realNow = Instant.parse("2026-10-16T14:12:00Z")
         val real = object : Clock {
-            override fun now() = Instant.parse("2026-10-16T14:12:00Z") + testScheduler.currentTime.milliseconds
+            override fun now() = realNow
         }
-        val got = demoReadings(real, TimeZone.UTC).take(4).toList()
-        assertEquals(listOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID), got.take(2).map { it.deviceId })
-        assertEquals(1.seconds * DEMO_SPEED.toInt(), got[2].at - got[0].at)
-        assertTrue(got[0].at == Instant.parse("2026-10-16T06:30:00Z"))
+        val clock = demoClock(real, TimeZone.UTC)
+        assertEquals(Instant.parse("2026-10-16T06:30:00Z"), clock.now())
+        realNow += 1.seconds
+        assertEquals(Instant.parse("2026-10-16T06:31:00Z"), clock.now())
+        assertEquals(60.0, DEMO_SPEED)
     }
 }

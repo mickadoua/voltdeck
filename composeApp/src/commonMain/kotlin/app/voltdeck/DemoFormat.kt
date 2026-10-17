@@ -18,7 +18,8 @@ fun formatDecimal(value: Double, decimals: Int): String {
 
 fun deviceTitle(id: DeviceId): String = when (id) {
     SimulatedPlant.BATTERY_ID -> "Batterie (simulée)"
-    SimulatedPlant.MPPT_ID -> "MPPT solaire (simulé)"
+    SimulatedPlant.MPPT_ID -> "SmartSolar MPPT (simulé)"
+    SimulatedPlant.SHUNT_ID -> "SmartShunt (simulé)"
     else -> "Équipement inconnu"
 }
 
@@ -33,15 +34,43 @@ fun sampleLabel(sample: Sample): String = when (sample.metric) {
     Metric.YIELD_TODAY -> "Production du jour"
     Metric.TEMPERATURE -> "Température sonde ${sample.channel + 1}"
     Metric.CELL_VOLTAGE -> "Cellule ${sample.channel + 1}"
+    Metric.DEVICE_STATE -> "État"
+    Metric.ERROR_CODE -> "Erreur"
+    Metric.LOAD_CURRENT -> "Courant de charge"
+    Metric.TIME_TO_GO -> "Autonomie restante"
+    Metric.CONSUMED_AH -> "Ah consommés"
+    Metric.INPUT_VOLTAGE -> "Tension d'entrée"
+    Metric.OUTPUT_VOLTAGE -> "Tension de sortie"
+    Metric.AUX_VOLTAGE -> "Tension auxiliaire"
+    Metric.MID_VOLTAGE -> "Tension point milieu"
+    Metric.ALARM_REASON -> "Alarmes"
+    Metric.OFF_REASON -> "Raison d'arrêt"
     else -> sample.metric.name
 }
 
-fun sampleText(sample: Sample): String {
-    val decimals = when (sample.metric) {
-        Metric.CELL_VOLTAGE -> 3
-        Metric.SOC, Metric.REMAINING_CAPACITY, Metric.NOMINAL_CAPACITY, Metric.TEMPERATURE -> 1
-        Metric.CYCLES, Metric.PV_POWER -> 0
-        else -> 2
+private val VICTRON_STATES = mapOf(
+    0 to "Arrêt", 1 to "Faible puissance", 2 to "Défaut", 3 to "Bulk", 4 to "Absorption", 5 to "Float",
+    6 to "Stockage", 7 to "Égalisation",
+)
+
+fun sampleText(sample: Sample): String = when (sample.metric) {
+    Metric.DEVICE_STATE -> VICTRON_STATES[sample.value.toInt()] ?: "Code ${sample.value.toInt()}"
+    Metric.ERROR_CODE -> if (sample.value == 0.0) "Aucune" else "Code ${sample.value.toInt()}"
+    Metric.ALARM_REASON, Metric.OFF_REASON ->
+        if (sample.value == 0.0) "Aucune" else "0x" + sample.value.toLong().toString(16).uppercase()
+    Metric.TIME_TO_GO -> {
+        val minutes = sample.value.toLong()
+        "${minutes / 60} h ${(minutes % 60).toString().padStart(2, '0')} min"
     }
-    return "${formatDecimal(sample.value, decimals)} ${sample.metric.unit}"
+    else -> {
+        val decimals = when (sample.metric) {
+            Metric.CELL_VOLTAGE -> 3
+            Metric.SOC, Metric.REMAINING_CAPACITY, Metric.NOMINAL_CAPACITY, Metric.TEMPERATURE,
+            Metric.CONSUMED_AH, Metric.LOAD_CURRENT,
+            -> 1
+            Metric.CYCLES, Metric.PV_POWER -> 0
+            else -> 2
+        }
+        "${formatDecimal(sample.value, decimals)} ${sample.metric.unit}"
+    }
 }

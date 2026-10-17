@@ -16,6 +16,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             api(project(":ble"))
+            api(project(":drivers"))
             api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.datetime)
         }
