@@ -1,0 +1,33 @@
+selectHour:
+SELECT * FROM agg_hour
+WHERE device_id = ? AND metric = ? AND channel = ? AND bucket_start >= ? AND bucket_start < ?
+ORDER BY bucket_start;
+
+-- Recalcul de plages d'heures depuis les minutes (idempotent : INSERT OR REPLACE).
+rollupHours:
+INSERT OR REPLACE INTO agg_hour(device_id, metric, channel, bucket_start, count, min, max, sum, last)
+SELECT g.device_id, g.metric, g.channel, g.hour_start, g.count, g.min, g.max, g.sum,
+       (SELECT x.last FROM agg_minute x
+         WHERE x.device_id = g.device_id AND x.metric = g.metric AND x.channel = g.channel
+           AND x.bucket_start >= g.hour_start AND x.bucket_start < g.hour_start + 3600
+         ORDER BY x.bucket_start DESC LIMIT 1)
+FROM (
+  SELECT device_id, metric, channel, bucket_start / 3600 * 3600 AS hour_start,
+         SUM(count) AS count, MIN(min) AS min, MAX(max) AS max, SUM(sum) AS sum
+  FROM agg_minute
+  WHERE bucket_start >= ? AND bucket_start < ?
+  GROUP BY device_id, metric, channel, hour_start
+) g;
+
+upsertHour:
+INSERT OR REPLACE INTO agg_hour(device_id, metric, channel, bucket_start, count, min, max, sum, last)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+hourBounds:
+SELECT MIN(bucket_start) AS first_bucket, MAX(bucket_start) AS last_bucket FROM agg_hour;
+
+countHours:
+SELECT COUNT(*) FROM agg_hour;
+
+selectLatestHour:
+SELECT * FROM agg_hour WHERE device_id = ? AND metric = ? AND channel = ? ORDER BY bucket_start DESC LIMIT 1;

@@ -22,6 +22,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core"))
+            implementation(project(":ble"))
+            implementation(project(":drivers"))
             implementation(project(":simulator"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

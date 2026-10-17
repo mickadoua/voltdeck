@@ -23,15 +23,16 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
- * Modèle physique minimal et déterministe d'un système 12 V : un MPPT, une batterie LiFePO4 4S de 200 Ah
- * et une consommation (base + frigo par cycles). Les mesures sont des valeurs synthétiques : aucune ne
+ * Modèle physique minimal et déterministe d'un système 12 V : un MPPT, une batterie LiFePO4 4S de 200 Ah, un
+ * SmartShunt sur cette batterie et une consommation (base + frigo par cycles). Les mesures sont des valeurs synthétiques : aucune ne
  * vient du matériel du fondateur.
  *
  * Déterminisme : mêmes `seed`, `start` et `zone`, et mêmes instants demandés => mêmes [Reading]. Le bruit est
  * une fonction pure de (graine, canal, seconde). L'état de charge est intégré par pas d'une minute simulée.
  * Non thread-safe : un seul consommateur à la fois.
  *
- * Les vrais encodages (annonces Victron chiffrées, trames JBD) arrivent avec VOL-5 et VOL-6.
+ * Les [Reading] sont les valeurs « vraies » du modèle ; [SimulatedTransport] les encode en annonces Victron chiffrées.
+ * L'encodage des trames JBD arrive avec VOL-6.
  */
 class SimulatedPlant(
     private val seed: Long,
@@ -51,10 +52,14 @@ class SimulatedPlant(
         advanceTo(at)
         val flows = flowsAt(at, soc)
         val packVolts = packVoltage(soc, flows.netAmps)
-        return listOf(batteryReading(at, flows, packVolts), mpptReading(at, flows, packVolts))
+        return listOf(
+            batteryReading(at, flows, packVolts),
+            mpptReading(at, flows, packVolts),
+            shuntReading(at, flows, packVolts),
+        )
     }
 
-    /** Émet les deux [Reading] toutes les [period] réelles, à l'heure donnée par [clock]. */
+    /** Émet les trois [Reading] (batterie, MPPT, SmartShunt) toutes les [period] réelles, à l'heure donnée par [clock]. */
     fun readings(clock: Clock, period: Duration = 1.seconds): Flow<Reading> = flow {
         while (true) {
             readingsAt(clock.now()).forEach { emit(it) }
@@ -119,7 +124,7 @@ class SimulatedPlant(
     private fun noise(channel: Long, t: Instant): Double = unit(seed, channel, t.epochSeconds)
 
     private fun batteryReading(at: Instant, flows: Flows, packVolts: Double): Reading {
-        val temp0 = 21.0 + 5.0 * sin(2 * PI * (localHour(at) - 9.0) / 24.0) + 0.3 * abs(flows.netAmps) / 10.0
+        val temp0 = batteryTemperature(at, flows)
         val samples = buildList {
             add(Sample(Metric.BATTERY_VOLTAGE, value = packVolts.round(2)))
             add(Sample(Metric.BATTERY_CURRENT, value = flows.netAmps.round(2)))
@@ -136,12 +141,41 @@ class SimulatedPlant(
         return Reading(BATTERY_ID, at, samples)
     }
 
+    private fun batteryTemperature(at: Instant, flows: Flows): Double =
+        21.0 + 5.0 * sin(2 * PI * (localHour(at) - 9.0) / 24.0) + 0.3 * abs(flows.netAmps) / 10.0
+
+    private fun shuntReading(at: Instant, flows: Flows, packVolts: Double): Reading {
+        val consumedAh = -(100.0 - soc) / 100.0 * CAPACITY_AH
+        val samples = buildList {
+            add(Sample(Metric.BATTERY_VOLTAGE, value = packVolts.round(2)))
+            add(Sample(Metric.BATTERY_CURRENT, value = flows.netAmps.round(2)))
+            add(Sample(Metric.SOC, value = soc.round(1)))
+            add(Sample(Metric.CONSUMED_AH, value = consumedAh.round(1)))
+            // Le temps restant n'a de sens qu'en décharge : en charge le SmartShunt annonce « non disponible ».
+            if (flows.netAmps < -MIN_DISCHARGE_AMPS) {
+                val minutes = soc / 100.0 * CAPACITY_AH / -flows.netAmps * 60.0
+                add(Sample(Metric.TIME_TO_GO, value = minutes.coerceAtMost(MAX_TIME_TO_GO_MIN).roundToInt().toDouble()))
+            }
+            add(Sample(Metric.TEMPERATURE, value = batteryTemperature(at, flows).round(1)))
+        }
+        return Reading(SHUNT_ID, at, samples)
+    }
+
+    private fun mpptState(pvWatts: Double): Double = when {
+        pvWatts < 1.0 -> STATE_OFF
+        soc < 90.0 -> STATE_BULK
+        soc < 100.0 -> STATE_ABSORPTION
+        else -> STATE_FLOAT
+    }
+
     private fun mpptReading(at: Instant, flows: Flows, packVolts: Double): Reading {
         val pvWatts = flows.mpptAmps * packVolts / EFFICIENCY
         return Reading(
             MPPT_ID,
             at,
             listOf(
+                Sample(Metric.DEVICE_STATE, value = mpptState(pvWatts)),
+                Sample(Metric.ERROR_CODE, value = 0.0),
                 Sample(Metric.PV_POWER, value = pvWatts.roundToInt().toDouble()),
                 Sample(Metric.BATTERY_VOLTAGE, value = packVolts.round(2)),
                 Sample(Metric.BATTERY_CURRENT, value = flows.mpptAmps.round(2)),
@@ -153,6 +187,7 @@ class SimulatedPlant(
     companion object {
         val BATTERY_ID = DeviceId("00000000-0000-4000-8000-0000000000b1")
         val MPPT_ID = DeviceId("00000000-0000-4000-8000-0000000000c2")
+        val SHUNT_ID = DeviceId("00000000-0000-4000-8000-0000000000d3")
 
         const val CAPACITY_AH = 200.0
         private const val INITIAL_SOC = 60.0
@@ -170,6 +205,12 @@ class SimulatedPlant(
         private const val CELL_DRIFT_V = 0.005
         private const val CELL_RESISTANCE_OHM = 0.0005
         private val STEP = 1.minutes
+        private const val MIN_DISCHARGE_AMPS = 0.05
+        private const val MAX_TIME_TO_GO_MIN = 65_000.0
+        private const val STATE_OFF = 0.0
+        private const val STATE_BULK = 3.0
+        private const val STATE_ABSORPTION = 4.0
+        private const val STATE_FLOAT = 5.0
 
         private const val CH_PV = 1L
         private const val CH_LOAD = 2L

@@ -45,10 +45,10 @@ class SimulatedPlantTest {
     }
 
     @Test
-    fun emitsOneBatteryAndOneMpptWithSensibleValues() {
+    fun emitsABatteryAnMpptAndAShuntWithSensibleValues() {
         val plant = SimulatedPlant(1, start, TimeZone.UTC)
         val noon = plant.readingsAt(start + 6.hours)
-        assertEquals(listOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID), noon.map { it.deviceId })
+        assertEquals(listOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID, SimulatedPlant.SHUNT_ID), noon.map { it.deviceId })
         val (battery, mppt) = noon
         fun Reading.value(metric: Metric, channel: Int = 0) =
             samples.firstOrNull { it.metric == metric && it.channel == channel }?.value
@@ -93,16 +93,33 @@ class SimulatedPlantTest {
     }
 
     @Test
-    fun readingsFlowEmitsBothDevicesEachTick() = runTest {
+    fun readingsFlowEmitsTheThreeDevicesEachTick() = runTest {
         val plant = SimulatedPlant(1, start, TimeZone.UTC)
         val clock = object : Clock {
             override fun now() = start + testScheduler.currentTime.minutes
         }
-        val got = plant.readings(clock).take(4).toList()
-        assertEquals(
-            listOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID, SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID),
-            got.map { it.deviceId },
-        )
-        assertTrue(got[2].at > got[0].at)
+        val got = plant.readings(clock).take(6).toList()
+        val ids = listOf(SimulatedPlant.BATTERY_ID, SimulatedPlant.MPPT_ID, SimulatedPlant.SHUNT_ID)
+        assertEquals(ids + ids, got.map { it.deviceId })
+        assertTrue(got[3].at > got[0].at)
+    }
+
+    @Test
+    fun shuntSeesTheBatteryAndReportsConsumedAhAsNegative() {
+        val plant = SimulatedPlant(1, start, TimeZone.UTC)
+        val (battery, _, shunt) = plant.readingsAt(start + 30.minutes)
+        fun Reading.value(m: Metric) = samples.first { it.metric == m }.value
+        assertEquals(battery.value(Metric.SOC), shunt.value(Metric.SOC))
+        assertEquals(battery.value(Metric.BATTERY_VOLTAGE), shunt.value(Metric.BATTERY_VOLTAGE))
+        assertTrue(shunt.value(Metric.CONSUMED_AH) < 0.0, "Ah consommés attendus négatifs")
+    }
+
+    @Test
+    fun timeToGoIsAbsentWhileChargingAndPresentWhileDischarging() {
+        val plant = SimulatedPlant(1, start, TimeZone.UTC)
+        val noon = plant.readingsAt(start + 6.hours)[2]
+        assertTrue(noon.samples.none { it.metric == Metric.TIME_TO_GO }, "pas de temps restant en charge")
+        val night = SimulatedPlant(1, start, TimeZone.UTC).readingsAt(start + 18.hours)[2]
+        assertTrue(night.samples.first { it.metric == Metric.TIME_TO_GO }.value > 0.0)
     }
 }

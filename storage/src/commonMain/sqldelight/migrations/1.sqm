@@ -1,0 +1,68 @@
+-- Migration 1 : schéma initial, tel que validé dans VOL-1 (décision, §5.3).
+-- Heures : epoch secondes UTC alignées. Jours et mois : clé locale + fuseau utilisé au roll-up.
+-- Pour les métriques d'énergie (ENERGY_*, CHARGE_*, PV_ENERGY_WH), seule la colonne `sum` a un sens.
+
+CREATE TABLE device (
+  id TEXT PRIMARY KEY NOT NULL,
+  driver_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  platform_address TEXT NOT NULL,
+  model TEXT,
+  created_at INTEGER NOT NULL,
+  archived_at INTEGER
+);
+
+CREATE TABLE agg_minute (
+  device_id TEXT NOT NULL REFERENCES device(id),
+  metric TEXT NOT NULL,
+  channel INTEGER NOT NULL DEFAULT 0,
+  bucket_start INTEGER NOT NULL,
+  count INTEGER NOT NULL,
+  min REAL NOT NULL,
+  max REAL NOT NULL,
+  sum REAL NOT NULL,
+  last REAL NOT NULL,
+  PRIMARY KEY (device_id, metric, channel, bucket_start)
+) WITHOUT ROWID;
+
+CREATE TABLE agg_hour (
+  device_id TEXT NOT NULL REFERENCES device(id),
+  metric TEXT NOT NULL,
+  channel INTEGER NOT NULL DEFAULT 0,
+  bucket_start INTEGER NOT NULL,
+  count INTEGER NOT NULL,
+  min REAL NOT NULL,
+  max REAL NOT NULL,
+  sum REAL NOT NULL,
+  last REAL NOT NULL,
+  PRIMARY KEY (device_id, metric, channel, bucket_start)
+) WITHOUT ROWID;
+
+CREATE TABLE agg_day (
+  device_id TEXT NOT NULL REFERENCES device(id),
+  metric TEXT NOT NULL,
+  channel INTEGER NOT NULL DEFAULT 0,
+  day TEXT NOT NULL,
+  tz_id TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  min REAL NOT NULL,
+  max REAL NOT NULL,
+  sum REAL NOT NULL,
+  last REAL NOT NULL,
+  PRIMARY KEY (device_id, metric, channel, day)
+) WITHOUT ROWID;
+
+CREATE TABLE agg_month (
+  device_id TEXT NOT NULL REFERENCES device(id),
+  metric TEXT NOT NULL,
+  channel INTEGER NOT NULL DEFAULT 0,
+  month TEXT NOT NULL,
+  tz_id TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  min REAL NOT NULL,
+  max REAL NOT NULL,
+  sum REAL NOT NULL,
+  last REAL NOT NULL,
+  PRIMARY KEY (device_id, metric, channel, month)
+) WITHOUT ROWID;

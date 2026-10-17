@@ -30,5 +30,6 @@ dependencyResolutionManagement {
 include(":core")
 include(":ble")
 include(":drivers")
+include(":storage")
 include(":simulator")
 include(":composeApp")

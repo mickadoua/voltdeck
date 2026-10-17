@@ -21,16 +21,22 @@ class SimulatedTransportTest {
     private fun frame(vararg b: Int) = ByteArray(b.size) { b[it].toByte() }
 
     @Test
-    fun advertisesABatteryAndAnMppt() = runTest {
-        val advs = SimulatedTransport(seed = 5).advertisements(ScanFilter.Any).take(2).toList()
-        assertEquals(setOf(SimulatedTransport.BATTERY_ID, SimulatedTransport.MPPT_ID), advs.map { it.id }.toSet())
+    fun advertisesABatteryAnMpptAndAShunt() = runTest {
+        val advs = SimulatedTransport(seed = 5).advertisements(ScanFilter.Any).take(3).toList()
+        assertEquals(
+            setOf(SimulatedTransport.BATTERY_ID, SimulatedTransport.MPPT_ID, SimulatedTransport.SHUNT_ID),
+            advs.map { it.id }.toSet(),
+        )
     }
 
     @Test
-    fun filterSelectsTheVictronAdvertisementOnly() = runTest {
+    fun filterSelectsTheVictronAdvertisementsOnly() = runTest {
         val advs = SimulatedTransport().advertisements(ScanFilter(companyId = SimulatedTransport.VICTRON_COMPANY_ID))
-            .take(3).toList()
-        assertTrue(advs.all { it.id == SimulatedTransport.MPPT_ID })
+            .take(4).toList()
+        assertEquals(
+            listOf(SimulatedTransport.MPPT_ID, SimulatedTransport.SHUNT_ID, SimulatedTransport.MPPT_ID, SimulatedTransport.SHUNT_ID),
+            advs.map { it.id },
+        )
     }
 
     @Test
@@ -70,11 +76,23 @@ class SimulatedTransportTest {
     @Test
     fun mutatingAnEmittedAdvertisementNeverAltersTheNextOnes() = runTest {
         val advs = SimulatedTransport().advertisements(ScanFilter(companyId = SimulatedTransport.VICTRON_COMPANY_ID))
-            .take(3).toList()
-        val first = advs[0].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID)
-        val before = advs[1].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID).copyOf()
-        first.fill(0x7F)
-        assertContentEquals(before, advs[1].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID))
-        assertContentEquals(before, advs[2].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID))
+            .take(4).toList()
+        fun data(index: Int) = advs[index].manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID)
+        val beforeShunt = data(1).copyOf()
+        val beforeNextMppt = data(2).copyOf()
+        data(0).fill(0x7F)
+        assertContentEquals(beforeShunt, data(1))
+        assertContentEquals(beforeNextMppt, data(2))
+    }
+
+    @Test
+    fun victronAdvertisementsAreProductAdvertisementsWithAFullPayload() = runTest {
+        val advs = SimulatedTransport().advertisements(ScanFilter(companyId = SimulatedTransport.VICTRON_COMPANY_ID))
+            .take(2).toList()
+        advs.forEach {
+            val data = it.manufacturerData.getValue(SimulatedTransport.VICTRON_COMPANY_ID)
+            assertEquals(0x10, data[0].toInt())
+            assertTrue(data.size >= 8 + 10)
+        }
     }
 }
