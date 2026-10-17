@@ -30,7 +30,7 @@ import kotlin.time.Duration.Companion.seconds
  * Les annonces Victron sont de vrais enregistrements « Instant Readout » : les mesures de [SimulatedPlant] à l'heure
  * de [clock] sont encodées bit à bit puis chiffrées en AES-CTR avec la clé du [scenario] (voir [SimulatedVictron]).
  * La trame de la batterie reste un gabarit, et le lien GATT n'émet aucune notification : l'encodage JBD arrive avec
- * VOL-6. Non thread-safe : un seul collecteur d'[advertisements] à la fois.
+ * VOL-6. Non thread-safe : tous les collecteurs d'[advertisements] doivent s'exécuter sur le même fil.
  */
 class SimulatedTransport(
     private val seed: Long = 1L,

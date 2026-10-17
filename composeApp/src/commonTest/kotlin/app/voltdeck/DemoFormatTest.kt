@@ -31,4 +31,21 @@ class DemoFormatTest {
     fun indexedMetricsAreNumberedFromOne() {
         assertEquals("Cellule 3", sampleLabel(Sample(Metric.CELL_VOLTAGE, 2, 3.3)))
     }
+
+    @Test
+    fun victronMetricsAreReadable() {
+        assertEquals("Bulk", sampleText(Sample(Metric.DEVICE_STATE, value = 3.0)))
+        assertEquals("Code 9", sampleText(Sample(Metric.DEVICE_STATE, value = 9.0)))
+        assertEquals("Aucune", sampleText(Sample(Metric.ERROR_CODE, value = 0.0)))
+        assertEquals("Code 17", sampleText(Sample(Metric.ERROR_CODE, value = 17.0)))
+        assertEquals("Aucune", sampleText(Sample(Metric.ALARM_REASON, value = 0.0)))
+        assertEquals("0x104", sampleText(Sample(Metric.OFF_REASON, value = 260.0)))
+        assertEquals("16 h 40 min", sampleText(Sample(Metric.TIME_TO_GO, value = 1000.0)))
+        assertEquals("-80.4 Ah", sampleText(Sample(Metric.CONSUMED_AH, value = -80.4)))
+    }
+
+    @Test
+    fun victronDevicesHaveATitle() {
+        assertEquals("SmartShunt (simulé)", deviceTitle(app.voltdeck.simulator.SimulatedPlant.SHUNT_ID))
+    }
 }

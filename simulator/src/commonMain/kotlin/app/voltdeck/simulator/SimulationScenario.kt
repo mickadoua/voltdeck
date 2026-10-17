@@ -32,8 +32,9 @@ object SimulatedVictron {
         SimulationScenario.WRONG_VICTRON_KEY -> OTHER_KEY
     }
 
-    /** Clé de test sous forme de texte à saisir (32 hexadécimaux), pour l'affichage du mode démo. */
-    fun testKeyHex(): String = TEST_KEY.exportBytes().joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+    /** Clé des équipements simulés, en 32 hexadécimaux : pour que le mode démo puisse l'afficher (clé publique, TEST ONLY). */
+    fun deviceKeyHex(scenario: SimulationScenario): String =
+        deviceKey(scenario).exportBytes().joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     const val MPPT_MODEL_ID = 0xA042
     const val SHUNT_MODEL_ID = 0xA389

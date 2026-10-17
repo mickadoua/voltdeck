@@ -122,10 +122,13 @@ class SimulatedVictronTest {
     @Test
     fun testKeysAreDistinctAndTheHexFormParsesBack() {
         assertNotEquals(SimulatedVictron.TEST_KEY.checkByte, SimulatedVictron.OTHER_KEY.checkByte)
-        assertEquals(VictronKey.HEX_LENGTH, SimulatedVictron.testKeyHex().length)
-        val parsed = VictronKey.parse(SimulatedVictron.testKeyHex())
-        assertIs<KeyParse.Valid>(parsed)
-        assertEquals(SimulatedVictron.TEST_KEY, parsed.key)
+        SimulationScenario.entries.forEach { scenario ->
+            val hex = SimulatedVictron.deviceKeyHex(scenario)
+            assertEquals(VictronKey.HEX_LENGTH, hex.length)
+            val parsed = VictronKey.parse(hex)
+            assertIs<KeyParse.Valid>(parsed)
+            assertEquals(SimulatedVictron.deviceKey(scenario), parsed.key)
+        }
     }
 
     @Test
