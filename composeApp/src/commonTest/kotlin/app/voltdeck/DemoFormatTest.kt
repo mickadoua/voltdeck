@@ -81,6 +81,7 @@ class DemoFormatTest {
         assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 3.0)))
         assertEquals("Charge et décharge coupées", sampleText(Sample(Metric.FET_STATE, value = 0.0)))
         assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 0xFF.toDouble())))
+        assertEquals("Charge et décharge actives", sampleText(Sample(Metric.FET_STATE, value = 131.0)))
     }
 
     @Test
