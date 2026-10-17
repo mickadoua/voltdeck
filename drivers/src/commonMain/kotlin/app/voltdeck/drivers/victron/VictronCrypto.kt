@@ -10,7 +10,8 @@ package app.voltdeck.drivers.victron
 /** AES-128-CTR de la plateforme (Android `javax.crypto`, iOS CommonCrypto). Aucune dépendance ajoutée. */
 internal expect fun platformAesCtr(key: ByteArray, counterBlock: ByteArray, data: ByteArray): ByteArray
 
-internal object VictronCrypto {
+/** Public pour que le simulateur chiffre ses annonces avec le même code que celui qui les déchiffre. */
+object VictronCrypto {
     const val BLOCK_BYTES = 16
 
     /**
@@ -19,7 +20,12 @@ internal object VictronCrypto {
      * Le PDF précise que tout enregistrement tient en un bloc ; au-delà de 16 octets, l'incrément du compteur n'est
      * pas documenté sans ambiguïté, donc on ne déchiffre pas plus.
      */
-    fun decryptFirstBlock(key: VictronKey, nonce: Int, encrypted: ByteArray): ByteArray {
+    fun decryptFirstBlock(key: VictronKey, nonce: Int, encrypted: ByteArray): ByteArray = applyKeystream(key, nonce, encrypted)
+
+    /** AES-CTR est symétrique : chiffrer est la même opération que déchiffrer. Réservé au simulateur et aux tests. */
+    fun encryptFirstBlock(key: VictronKey, nonce: Int, plain: ByteArray): ByteArray = applyKeystream(key, nonce, plain)
+
+    private fun applyKeystream(key: VictronKey, nonce: Int, encrypted: ByteArray): ByteArray {
         val counter = ByteArray(BLOCK_BYTES)
         counter[0] = nonce.toByte()
         counter[1] = (nonce shr 8).toByte()

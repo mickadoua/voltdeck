@@ -10,27 +10,38 @@ import app.voltdeck.ble.PlatformDeviceId
 import app.voltdeck.ble.ReadAllowlist
 import app.voltdeck.ble.ReadOnlyGattLink
 import app.voltdeck.ble.ScanFilter
+import app.voltdeck.core.DeviceId
+import app.voltdeck.core.Reading
+import app.voltdeck.drivers.victron.VictronRecordType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.datetime.TimeZone
 import kotlin.math.abs
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Faux transport Bluetooth déterministe : il annonce une batterie (service JBD) et un MPPT (Company ID Victron),
- * puis refuse, comme le vrai transport, toute commande hors de [ReadAllowlist].
+ * Faux transport Bluetooth déterministe : il annonce une batterie (service JBD), un MPPT et un SmartShunt (Company
+ * ID Victron), puis refuse, comme le vrai transport, toute commande hors de [ReadAllowlist].
  *
- * Les annonces sont factices : la charge utile Victron est un gabarit non chiffré qui ne ressemble à aucun
- * enregistrement réel, et le lien GATT n'émet aucune notification. Les vrais encodages arrivent avec VOL-5 et VOL-6.
- * Non thread-safe.
+ * Les annonces Victron sont de vrais enregistrements « Instant Readout » : les mesures de [SimulatedPlant] à l'heure
+ * de [clock] sont encodées bit à bit puis chiffrées en AES-CTR avec la clé du [scenario] (voir [SimulatedVictron]).
+ * La trame de la batterie reste un gabarit, et le lien GATT n'émet aucune notification : l'encodage JBD arrive avec
+ * VOL-6. Non thread-safe : un seul collecteur d'[advertisements] à la fois.
  */
 class SimulatedTransport(
     private val seed: Long = 1L,
     private val advertisementPeriod: Duration = 1.seconds,
+    private val scenario: SimulationScenario = SimulationScenario.SUNNY_DAY,
+    private val clock: Clock = Clock.System,
+    zone: TimeZone = TimeZone.UTC,
 ) : BleTransport {
     private val accepted = mutableListOf<ByteArray>()
+    private val plant = SimulatedPlant(seed, clock.now(), zone)
+    private val victronKey = SimulatedVictron.deviceKey(scenario)
 
     /** Trames acceptées par les liens GATT de ce transport, dans l'ordre. */
     val acceptedFrames: List<ByteArray> get() = accepted.map { it.copyOf() }
@@ -38,9 +49,10 @@ class SimulatedTransport(
     override fun advertisements(filter: ScanFilter): Flow<Adv> = flow {
         var tick = 0L
         while (true) {
-            for ((index, template) in templates.withIndex()) {
+            val readings = plant.readingsAt(clock.now()).associateBy { it.deviceId }
+            for ((index, device) in devices.withIndex()) {
                 val rssi = -55 - (abs(SimulatedPlant.unit(seed, index.toLong(), tick)) * 20).toInt()
-                val adv = template.toAdv(rssi)
+                val adv = device.toAdv(rssi, tick, readings)
                 if (filter.matches(adv)) emit(adv)
             }
             tick++
@@ -48,9 +60,20 @@ class SimulatedTransport(
         }
     }
 
+    private fun Device.toAdv(rssi: Int, tick: Long, readings: Map<DeviceId, Reading>): Adv {
+        val victron = victron
+        val data = if (victron == null) manufacturerData else {
+            val samples = readings.getValue(victron.plantId).samples
+            val nonce = ((tick + victron.nonceOffset) and 0xFFFF).toInt()
+            val record = VictronAdvertisementEncoder.encode(victron.type, victron.modelId, nonce, victronKey, samples)
+            mapOf(VICTRON_COMPANY_ID to record)
+        }
+        return Adv(id, name, rssi, data, serviceUuids)
+    }
+
     override suspend fun connect(id: PlatformDeviceId, profile: GattProfile): ReadOnlyGattLink {
-        val template = templates.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
-        val ledger = ConnectionLedger().apply { record(template.toAdv(rssi = -60)) }
+        val device = devices.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Équipement simulé inconnu")
+        val ledger = ConnectionLedger().apply { record(Adv(id, device.name, -60, device.advertisedManufacturerData(), device.serviceUuids)) }
         ledger.requireConnectable(id, profile)
         return SimulatedGattLink()
     }
@@ -68,24 +91,37 @@ class SimulatedTransport(
         override fun close() = Unit
     }
 
-    private class Template(
+    private class VictronRole(val plantId: DeviceId, val type: VictronRecordType, val modelId: Int, val nonceOffset: Long)
+
+    private class Device(
         val id: PlatformDeviceId,
         val name: String,
         val manufacturerData: Map<Int, ByteArray>,
         val serviceUuids: List<String>,
+        val victron: VictronRole? = null,
     ) {
-        fun toAdv(rssi: Int) = Adv(id, name, rssi, manufacturerData, serviceUuids)
+        /** Donnée constructeur sans mesure : suffit au registre de connexions, qui ne regarde que le Company ID. */
+        fun advertisedManufacturerData(): Map<Int, ByteArray> =
+            if (victron == null) manufacturerData else mapOf(VICTRON_COMPANY_ID to byteArrayOf(0x10))
     }
 
     companion object {
         val BATTERY_ID = PlatformDeviceId("sim-battery")
         val MPPT_ID = PlatformDeviceId("sim-mppt")
+        val SHUNT_ID = PlatformDeviceId("sim-shunt")
         const val VICTRON_COMPANY_ID = ConnectionPolicy.VICTRON_COMPANY_ID
         val JBD_SERVICE_UUID = GattProfile.Jbd.serviceUuid
 
-        private val templates = listOf(
-            Template(BATTERY_ID, "SIM-BATT", emptyMap(), listOf(JBD_SERVICE_UUID)),
-            Template(MPPT_ID, "SIM-MPPT", mapOf(VICTRON_COMPANY_ID to byteArrayOf(0x10, 0x00, 0x00)), emptyList()),
+        private val devices = listOf(
+            Device(BATTERY_ID, "SIM-BATT", emptyMap(), listOf(JBD_SERVICE_UUID)),
+            Device(
+                MPPT_ID, "SIM-MPPT", emptyMap(), emptyList(),
+                VictronRole(SimulatedPlant.MPPT_ID, VictronRecordType.SOLAR_CHARGER, SimulatedVictron.MPPT_MODEL_ID, nonceOffset = 100),
+            ),
+            Device(
+                SHUNT_ID, "SIM-SHUNT", emptyMap(), emptyList(),
+                VictronRole(SimulatedPlant.SHUNT_ID, VictronRecordType.BATTERY_MONITOR, SimulatedVictron.SHUNT_MODEL_ID, nonceOffset = 7_000),
+            ),
         )
     }
 }

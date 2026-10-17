@@ -11,7 +11,7 @@ import app.voltdeck.ble.ConnectionPolicy
 import app.voltdeck.core.DeviceRole
 
 /** Type d'enregistrement Victron (octet 4 de la donnée constructeur). Seuls les types décodés sont listés. */
-enum class VictronRecordType(val code: Int, val role: DeviceRole, internal val minPayloadBytes: Int) {
+enum class VictronRecordType(val code: Int, val role: DeviceRole, val minPayloadBytes: Int) {
     SOLAR_CHARGER(0x01, DeviceRole.SOLAR_CHARGER, minPayloadBytes = 12),
     BATTERY_MONITOR(0x02, DeviceRole.SHUNT, minPayloadBytes = 15),
     DCDC_CONVERTER(0x04, DeviceRole.DCDC, minPayloadBytes = 10);
