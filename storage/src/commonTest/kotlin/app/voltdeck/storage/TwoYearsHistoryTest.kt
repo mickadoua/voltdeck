@@ -74,10 +74,13 @@ class TwoYearsHistoryTest {
         val (twoYearsMs, twoYearsPoints) = timed { reader.series(key, now - 730.days, now, now, zone).rows.size }
         val (stackMs, stackPoints) = timed { metrics.sumOf { reader.series(SeriesKey(SHUNT, it), now - 365.days, now, now, zone).rows.size } }
         val (monthMs, monthPoints) = timed { reader.series(key, now - 60.days, now, now, zone).rows.size }
+        val tzOf = timed { (1..365).sumOf { kotlinx.datetime.TimeZone.of("Europe/Paris").id.length } }.first
+        val parse = timed { (1..365).sumOf { kotlinx.datetime.LocalDate.parse("2026-03-14").year.toInt() } }.first
+        val dayStart = timed { (1..365).sumOf { kotlinx.datetime.LocalDate.parse("2026-03-14").start(zone).epochSeconds.toInt() } }.first
         val level = reader.series(key, now - 365.days, now, now, zone).level
         val report = "PERF un an (jours): $yearMs ms, $yearPoints points, niveau $level; " +
             "stored(DAY) seul: $yearSqlMs ms, $yearSqlRows lignes; SQL brut sans mapping: $rawSqlMs ms, $rawSqlRows lignes; " +
-            "un an, énergie: $energyMs ms, $energyPoints points; deux ans: $twoYearsMs ms, $twoYearsPoints points; " +
+            "[DIAG x365] TimeZone.of: $tzOf ms, LocalDate.parse: $parse ms, parse+start(zone): $dayStart ms; un an, énergie: $energyMs ms, $energyPoints points; deux ans: $twoYearsMs ms, $twoYearsPoints points; " +
             "un an, ${metrics.size} séries d'un écran: $stackMs ms, $stackPoints points; 60 jours (heures): $monthMs ms, $monthPoints points"
         println(report)
 
