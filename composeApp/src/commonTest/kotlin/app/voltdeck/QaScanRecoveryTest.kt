@@ -73,7 +73,7 @@ class QaScanRecoveryTest {
     }
 
     @Test
-    fun permissionDeniedFromTheStartShowsAnErrorThenRecoversOnceGranted() = scenario(SecurityException("BLUETOOTH_SCAN denied")) { sw, shared, count ->
+    fun permissionDeniedFromTheStartShowsAnErrorThenRecoversOnceGranted() = scenario(IllegalStateException("BLUETOOTH_SCAN denied")) { sw, shared, count ->
         advanceTimeBy(5.seconds); runCurrent()
         assertNotNull(shared.scanError.value)
         assertEquals(0, count())
