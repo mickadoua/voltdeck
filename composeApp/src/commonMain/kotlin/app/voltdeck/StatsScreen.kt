@@ -109,8 +109,8 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TotalCard("Production", d.produced, d.producedComparison, p.solar, SunIcon, Modifier.weight(1f))
-            TotalCard("Consommation", d.consumed, d.consumedComparison, p.load, PlugIcon, Modifier.weight(1f))
+            TotalCard("Production", "Prod.", d.produced, d.producedComparison, p.solar, SunIcon, Modifier.weight(1f))
+            TotalCard("Consommation", "Conso.", d.consumed, d.consumedComparison, p.load, PlugIcon, Modifier.weight(1f))
         }
 
         Card(Modifier.fillMaxWidth()) {
@@ -166,10 +166,10 @@ private fun slotLabel(at: Instant, level: Level, zone: TimeZone): String {
 }
 
 @Composable
-private fun TotalCard(title: String, total: EnergyTotal?, comparison: Comparison?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
+private fun TotalCard(title: String, shortTitle: String, total: EnergyTotal?, comparison: Comparison?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
     val p = LocalPalette.current
     Card(modifier, radius = 18.dp, padding = 14.dp) {
-        TileHeader(title, color, icon)
+        TileHeader(title, color, icon, shortTitle)
         Value(total?.let { frDecimal(it.kwh, 2) } ?: DASH, "kWh", 26.sp)
         if (total != null && total.calculated) Tag("calculée")
         total?.coverage?.takeIf { it < 0.99 }?.let { Txt("Couverture ${frDecimal(it * 100, 0)} %", 12.sp, color = p.muted) }
@@ -256,6 +256,13 @@ private fun SocLine(rows: List<AggRow>, from: Instant, kind: PeriodKind, zone: T
         xLabel = { minutes ->
             val t = instantAt(from, minutes).toLocalDateTime(zone)
             if (kind == PeriodKind.DAY) "${t.hour} h" else "${t.date.day}/${t.date.month.ordinal + 1}"
+        },
+        tickLabel = { minutes ->
+            if (kind == PeriodKind.DAY) {
+                "${instantAt(from, minutes).toLocalDateTime(zone).hour} h"
+            } else {
+                dayTick(from, minutes, zone).let { "${it.day}/${it.month.ordinal + 1}" }
+            }
         },
         description = "Charge de la batterie, de 0 à 100 %",
         modifier = Modifier.fillMaxWidth().height(180.dp),

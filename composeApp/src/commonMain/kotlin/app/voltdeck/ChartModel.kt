@@ -5,8 +5,11 @@ import app.voltdeck.storage.EnergyBucket
 import kotlin.math.roundToLong
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
@@ -45,6 +48,16 @@ fun segmentsOf(rows: List<AggRow>, origin: Instant): List<Segment> {
 
 /** L'instant représenté par un x de [Segment] (minutes depuis [origin]). */
 fun instantAt(origin: Instant, minutes: Double): Instant = origin + minutes.roundToLong().minutes
+
+/**
+ * Jour porté par un repère de l'axe posé toutes les 1 440 minutes absolues depuis [origin] (un minuit local) : le
+ * minuit local le plus proche. Un jour de changement d'heure dure 23 ou 25 h, le repère suivant tombe alors à 23 h
+ * ou 1 h : la date lue à l'instant exact serait celle de la veille ou en double.
+ */
+fun dayTick(origin: Instant, minutes: Double, zone: TimeZone): LocalDate {
+    val t = instantAt(origin, minutes).toLocalDateTime(zone)
+    return if (t.hour >= 12) t.date.plus(1, DateTimeUnit.DAY) else t.date
+}
 
 /** Début de l'heure locale qui contient [t] : origine d'axe alignée sur des heures pleines. */
 fun startOfHour(t: Instant, zone: TimeZone): Instant {

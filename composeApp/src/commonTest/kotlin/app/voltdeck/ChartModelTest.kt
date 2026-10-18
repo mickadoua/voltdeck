@@ -9,6 +9,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -121,5 +122,28 @@ class ChartModelTest {
         assertEquals(t0 - 24.hours, opened.from)
         assertEquals(t0 + 1.hours - 24.hours, anHourLater.from)
         assertEquals(t0 + 1.hours, anHourLater.to)
+    }
+
+    private val paris = TimeZone.of("Europe/Paris")
+
+    private fun dayTicks(year: Int, month: Int, days: Int): List<String> {
+        val origin = kotlinx.datetime.LocalDateTime(year, month, 1, 0, 0).toInstant(paris)
+        return (0 until days).map { dayTick(origin, it * 1440.0, paris).toString() }
+    }
+
+    @Test
+    fun dayTicksStayOnTheirCalendarDayAcrossTheAutumnClockChange() {
+        // Le 25 octobre 2026 dure 25 h : à 1 440 minutes absolues, le repère n° 25 tombe à 23 h le 25.
+        val expected = (1..31).map { "2026-10-" + it.toString().padStart(2, '0') }
+        assertEquals(expected, dayTicks(2026, 10, 31))
+        val origin = kotlinx.datetime.LocalDateTime(2026, 10, 1, 0, 0).toInstant(paris)
+        val naive = instantAt(origin, 25 * 1440.0).toLocalDateTime(paris).date.toString()
+        assertEquals("2026-10-25", naive, "sans arrondi, le repère n° 25 porterait la date du 25 au lieu du 26")
+    }
+
+    @Test
+    fun dayTicksStayOnTheirCalendarDayAcrossTheSpringClockChange() {
+        val expected = (1..31).map { "2026-03-" + it.toString().padStart(2, '0') }
+        assertEquals(expected, dayTicks(2026, 3, 31))
     }
 }

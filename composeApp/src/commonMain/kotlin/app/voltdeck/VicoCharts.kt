@@ -155,7 +155,7 @@ private class MinuteAlignedRange(
 /**
  * Courbe en tronçons : chaque trou de collecte sépare deux tronçons, jamais relié. [xLabel] reçoit des minutes
  * depuis l'origine de l'axe (voir [Segment]), qui doit tomber sur une heure pleine ; un repère est posé toutes
- * les [labelEveryMinutes] minutes (Vico en saute si les libellés se touchent). [fixedY] fige l'axe vertical
+ * les [labelEveryMinutes] minutes (Vico en saute si les libellés se touchent) et libellé par [tickLabel] ; [xLabel] sert au repère au toucher. [fixedY] fige l'axe vertical
  * (0 à 100 % pour la charge).
  */
 @Composable
@@ -166,6 +166,7 @@ fun SegmentedLineChart(
     decimals: Int,
     xLabel: (Double) -> String,
     labelEveryMinutes: Int,
+    tickLabel: (Double) -> String = xLabel,
     description: String,
     modifier: Modifier = Modifier,
     fixedY: ClosedFloatingPointRange<Double>? = null,
@@ -202,7 +203,7 @@ fun SegmentedLineChart(
                 bottomAxis = HorizontalAxis.rememberBottom(
                     label = axisLabel(),
                     guideline = null,
-                    valueFormatter = CartesianValueFormatter { _, v, _ -> xLabel(v) },
+                    valueFormatter = CartesianValueFormatter { _, v, _ -> tickLabel(v) },
                     itemPlacer = remember(labelEveryMinutes) { HorizontalAxis.ItemPlacer.aligned(spacing = { labelEveryMinutes }) },
                 ),
                 marker = rememberDefaultCartesianMarker(

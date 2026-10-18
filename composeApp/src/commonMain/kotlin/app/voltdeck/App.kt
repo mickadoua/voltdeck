@@ -258,7 +258,7 @@ private fun TabBar(current: Screen, onSelect: (Screen) -> Unit) {
         Modifier.fillMaxWidth().background(p.surface).padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        listOf(Screen.Overview to "Accueil", Screen.Stats to "Statistiques", Screen.Devices to "Équipements").forEach { (target, label) ->
+        listOf(Triple(Screen.Overview, "Accueil", "Accueil"), Triple(Screen.Stats, "Statistiques", "Stats"), Triple(Screen.Devices, "Équipements", "Équip.")).forEach { (target, label, short) ->
             val active = current == target
             Box(
                 Modifier
@@ -272,7 +272,7 @@ private fun TabBar(current: Screen, onSelect: (Screen) -> Unit) {
                     if (active) Modifier.background(p.accent, CircleShape).padding(horizontal = 12.dp, vertical = 8.dp) else Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt(label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2, oneLine = true)
+                    Txt(label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2, oneLine = true, shortText = short)
                 }
             }
         }
