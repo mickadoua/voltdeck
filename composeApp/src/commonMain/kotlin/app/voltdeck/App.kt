@@ -68,6 +68,7 @@ private sealed interface Screen {
     data object AddDevice : Screen
     data object Diagnostic : Screen
     data class Shunt(val device: KnownDevice) : Screen
+    data class Device(val device: KnownDevice) : Screen
 }
 
 @Composable
@@ -124,6 +125,12 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                         screen = Screen.Overview
                     },
                 )
+                is Screen.Device -> DeviceScreen(
+                    runtime = runtime,
+                    device = current.device,
+                    onBack = { screen = Screen.Devices },
+                    onShunt = { screen = Screen.Shunt(current.device) },
+                )
                 Screen.Diagnostic -> DiagnosticScreen(runtime, background) { screen = Screen.Devices }
                 Screen.AddDevice -> if (live != null) {
                     AddDeviceScreen(live, bluetooth, onBack = { screen = Screen.Devices }, onAdded = {
@@ -166,6 +173,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                                 onMode = { runtime.setDemo(it) },
                                 onScenario = { runtime.setScenario(it) },
                                 onShunt = { screen = Screen.Shunt(it) },
+                                onDetail = { screen = Screen.Device(it) },
                                 onAdd = { screen = Screen.AddDevice },
                                 onDiagnostic = { screen = Screen.Diagnostic },
                                 onRemove = { id ->
@@ -281,6 +289,7 @@ private fun DevicesScreen(
     onMode: (Boolean) -> Unit,
     onScenario: (SimulationScenario) -> Unit,
     onShunt: (KnownDevice) -> Unit,
+    onDetail: (KnownDevice) -> Unit,
     onAdd: () -> Unit,
     onDiagnostic: () -> Unit,
     onRemove: (DeviceId) -> Unit,
@@ -340,7 +349,7 @@ private fun DevicesScreen(
         }
         session.devices.forEach { device ->
             val victron = device.role != DeviceRole.BATTERY
-            DeviceCard(latest[device.deviceId], session.title(device.deviceId), if (victron) statuses[device.deviceId] ?: VictronLinkStatus.WAITING else null, simulated = isDemo) {
+            DeviceCard(device.role, latest[device.deviceId], session.title(device.deviceId), if (victron) statuses[device.deviceId] ?: VictronLinkStatus.WAITING else null, simulated = isDemo, onDetail = { onDetail(device) }) {
                 if (device.role == DeviceRole.SHUNT) {
                     SecondaryButton("Position : ${placementSummary(setupOf(device.deviceId))}", Modifier.fillMaxWidth()) { onShunt(device) }
                 }
@@ -413,10 +422,12 @@ private fun KeyEntry(session: Session, device: KnownDevice) {
 
 @Composable
 private fun DeviceCard(
+    role: DeviceRole,
     reading: Reading?,
     title: String,
     status: VictronLinkStatus? = null,
     simulated: Boolean,
+    onDetail: () -> Unit,
     extra: (@Composable () -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -426,13 +437,14 @@ private fun DeviceCard(
         if (reading != null) {
             val local = reading.at.toLocalDateTime(TimeZone.currentSystemDefault())
             Txt("${if (simulated) "Heure simulée" else "Dernière mesure"} ${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}", 13.sp, color = p.muted)
-            reading.samples.forEach { sample ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Txt(sampleLabel(sample), 15.sp, color = p.ink2, modifier = Modifier.weight(1f))
-                    Txt(sampleText(sample), 16.sp, FontWeight.SemiBold)
+            deviceDetail(role, reading).hero?.let { hero ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Txt(hero.label, 15.sp, color = p.ink2, modifier = Modifier.weight(1f))
+                    Value(hero.number, hero.unit, 22.sp)
                 }
             }
         }
+        SecondaryButton(if (reading != null) "Voir le détail" else "Voir l'équipement", Modifier.fillMaxWidth(), onDetail)
         extra?.invoke()
     }
 }
