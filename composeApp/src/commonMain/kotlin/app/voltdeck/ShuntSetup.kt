@@ -29,8 +29,19 @@ enum class Circuit(val label: String, val isSource: Boolean) {
     }
 }
 
-data class ShuntSetup(val placement: ShuntPlacement, val circuit: Circuit? = null, val name: String? = null) {
+/**
+ * [capacityAh] : capacité nominale de la batterie saisie par l'utilisateur, seulement pour un shunt sur le négatif de la batterie.
+ * Sert à estimer les cycles quand aucun BMS ne les compte ; sans elle, l'estimation est masquée.
+ */
+data class ShuntSetup(
+    val placement: ShuntPlacement,
+    val circuit: Circuit? = null,
+    val name: String? = null,
+    val capacityAh: Double? = null,
+) {
     init {
+        require(capacityAh == null || placement == ShuntPlacement.BATTERY) { "la capacité n'a de sens que pour le négatif de la batterie" }
+        require(capacityAh == null || isValidCapacity(capacityAh)) { "capacité hors limites : $capacityAh" }
         require((placement == ShuntPlacement.LOAD || placement == ShuntPlacement.SOURCE) == (circuit != null)) {
             "un circuit est requis pour LOAD et SOURCE, interdit sinon"
         }
@@ -39,7 +50,13 @@ data class ShuntSetup(val placement: ShuntPlacement, val circuit: Circuit? = nul
 
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: circuit?.label ?: "Shunt"
 
-    fun encode(): String = listOfNotNull(placement.name, circuit?.name, name?.takeIf { it.isNotBlank() }).joinToString(SEPARATOR)
+    /** Sans capacité, le texte reste celui d'avant (réglages déjà enregistrés) ; avec, circuit et nom vides gardent leur place. */
+    fun encode(): String =
+        if (capacityAh == null) {
+            listOfNotNull(placement.name, circuit?.name, name?.takeIf { it.isNotBlank() }).joinToString(SEPARATOR)
+        } else {
+            listOf(placement.name, circuit?.name.orEmpty(), name?.takeIf { it.isNotBlank() }.orEmpty(), capacityAh.toString()).joinToString(SEPARATOR)
+        }
 
     companion object {
         /** Réglage par défaut d'un shunt qui s'annonce en moniteur de batterie. */
@@ -47,11 +64,16 @@ data class ShuntSetup(val placement: ShuntPlacement, val circuit: Circuit? = nul
 
         private const val SEPARATOR = "\u001F"
 
+        const val MAX_CAPACITY_AH = 10_000.0
+
+        fun isValidCapacity(ah: Double) = ah.isFinite() && ah >= 1.0 && ah <= MAX_CAPACITY_AH
+
         fun decode(text: String): ShuntSetup? {
             val parts = text.split(SEPARATOR)
             val placement = ShuntPlacement.entries.firstOrNull { it.name == parts[0] } ?: return null
-            val circuit = parts.getOrNull(1)?.let { name -> Circuit.entries.firstOrNull { it.name == name } ?: return null }
-            return runCatching { ShuntSetup(placement, circuit, parts.getOrNull(2)) }.getOrNull()
+            val circuit = parts.getOrNull(1)?.takeIf { it.isNotEmpty() }?.let { name -> Circuit.entries.firstOrNull { it.name == name } ?: return null }
+            val capacity = parts.getOrNull(3)?.toDoubleOrNull()?.takeIf(::isValidCapacity)
+            return runCatching { ShuntSetup(placement, circuit, parts.getOrNull(2)?.takeIf { it.isNotEmpty() }, capacity) }.getOrNull()
         }
     }
 }
