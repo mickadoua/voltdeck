@@ -2,6 +2,7 @@ package app.voltdeck
 
 import app.voltdeck.simulator.AcceleratedClock
 import app.voltdeck.storage.EnergyBucket
+import app.voltdeck.storage.Level
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -18,6 +19,16 @@ import kotlin.time.Instant
 
 class StatsModelTest {
     private val friday = LocalDate(2026, 10, 16)
+
+    @Test
+    fun dataLoadedForAnotherPeriodIsNotShownUnderTheNewTitle() {
+        val june = StatsPeriod(PeriodKind.MONTH, LocalDate(2026, 6, 10))
+        val year = StatsPeriod(PeriodKind.YEAR, LocalDate(2026, 6, 10))
+        val loaded = StatsData(june, Level.DAY, emptyList(), null, null, null, null, emptyList(), null, null, null, null)
+        assertEquals(loaded, loaded.shownFor(june))
+        assertNull(loaded.shownFor(year), "l'en-tête de l'année ne doit pas coiffer les chiffres de juin")
+        assertNull(null.shownFor(june))
+    }
 
     @Test
     fun periodsStartAndEndOnTheirCalendarBoundaries() {

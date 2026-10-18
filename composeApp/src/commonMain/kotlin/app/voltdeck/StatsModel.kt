@@ -135,6 +135,9 @@ fun comparableDays(period: StatsPeriod, today: LocalDate): Pair<List<LocalDate>,
 /** Un jour ne compte dans une comparaison que s'il a au moins ce nombre d'heures mesurées : une demi-journée fausserait le total. */
 const val MIN_MEASURED_HOURS = 20
 
+/** Les données chargées pour une autre période que [period] ne s'affichent pas sous son titre : « Chargement… » à la place. */
+fun StatsData?.shownFor(period: StatsPeriod): StatsData? = this?.takeIf { it.period == period }
+
 /** Part minimale des périodes observées que [SystemStats.consumption] doit avoir pu calculer (il écarte celles où un DC-DC débite). */
 const val MIN_CONSUMPTION_COVERAGE = 0.9
 
