@@ -65,13 +65,62 @@ fun bootAttemptText(attempt: BootAttempt?, now: Instant): String {
         BootOutcome.NO_DEVICE -> "non tentée : aucun équipement"
         BootOutcome.NO_PERMISSION -> "non tentée : permission Bluetooth retirée"
         BootOutcome.REFUSED -> "refusée par Android${attempt.detail?.let { " ($it)" }.orEmpty()}"
+        BootOutcome.FAILED -> "échec inattendu${attempt.detail?.let { " ($it)" }.orEmpty()}"
     }
     return "$what, ${ageText(now - attempt.at)}"
 }
 
-/** Un refus d'Android est le seul cas qui demande une action de l'utilisateur (restriction du constructeur, droit retiré). */
+/** Un refus d'Android ou un droit retiré demandent une action de l'utilisateur (restriction du constructeur, droit à rendre). */
 fun bootAttemptIsProblem(attempt: BootAttempt?) =
-    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.NO_PERMISSION)
+    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.FAILED || attempt.outcome == BootOutcome.NO_PERMISSION)
+
+/**
+ * Le service ne tourne toujours pas depuis son dernier échec. Un échec suivi d'un démarrage reste affiché, mais n'alerte plus.
+ * L'ordre ne se fie à l'horloge murale que faute d'autre repère : elle peut être en retard ou en avance au démarrage du
+ * téléphone (heure réseau pas encore reçue). On compare d'abord les compteurs de démarrages, puis, dans un même
+ * démarrage, le temps écoulé depuis le démarrage.
+ */
+fun serviceFailureUnresolved(failure: BootAttempt?, lastStart: BootAttempt?): Boolean {
+    if (failure == null) return false
+    if (lastStart == null) return true
+    val failureBoot = failure.bootCount
+    val startBoot = lastStart.bootCount
+    if (failureBoot != null && startBoot != null) {
+        if (startBoot != failureBoot) return startBoot < failureBoot
+        val failureElapsed = failure.sinceBoot
+        val startElapsed = lastStart.sinceBoot
+        if (failureElapsed != null && startElapsed != null) return startElapsed < failureElapsed
+    }
+    return lastStart.at < failure.at
+}
+
+fun serviceFailureLabel(failure: BootAttempt) =
+    if (failure.outcome == BootOutcome.FAILED) "Échec inattendu du service" else "Service refusé par Android"
+
+fun serviceFailurePill(failure: BootAttempt) =
+    if (failure.outcome == BootOutcome.FAILED) "Le service a échoué de façon inattendue : à signaler" else "Android a refusé le service de collecte"
+
+/** Quand l'échec a eu lieu, à quel démarrage du téléphone il se rattache, et quand le service a redémarré depuis. */
+fun serviceFailureText(failure: BootAttempt, lastStart: BootAttempt?, now: Instant): String {
+    val kind = failure.detail ?: "refus"
+    val boot = failure.bootCount?.let { ", démarrage n° $it" }.orEmpty()
+    val since = when {
+        lastStart == null || serviceFailureUnresolved(failure, lastStart) -> ", pas relancé depuis"
+        else -> ", relancé ${ageText(now - lastStart.at)}"
+    }
+    return "$kind, ${ageText(now - failure.at)}$boot$since"
+}
+
+/**
+ * Le téléphone a redémarré depuis l'activation du réglage et le récepteur n'a rien noté pour ce démarrage : Android ne
+ * l'a pas appelé (démarrage automatique bloqué par le constructeur, application arrêtée de force). Sans le compteur de
+ * démarrages, on ne peut pas conclure et on ne crie pas.
+ */
+fun bootReceiverNotCalled(restartAfterBoot: Boolean, enabledAtBootCount: Int?, currentBootCount: Int?, attempt: BootAttempt?): Boolean {
+    if (!restartAfterBoot || enabledAtBootCount == null || currentBootCount == null) return false
+    if (currentBootCount <= enabledAtBootCount) return false
+    return attempt?.bootCount != currentBootCount
+}
 
 @Composable
 fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection, onBack: () -> Unit) {
@@ -133,7 +182,13 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection,
                 Line("Réglage", if (background.restartAfterBoot) "activé" else "désactivé")
                 Line("Dernière tentative", bootAttemptText(bootAttempt, wallNow))
                 if (bootAttemptIsProblem(bootAttempt)) Pill("La collecte n'a pas repris seule", Tone.WARN)
-                serviceFailure?.let { Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}") }
+                if (bootReceiverNotCalled(background.restartAfterBoot, background.restartEnabledAtBootCount, background.bootCount, bootAttempt)) {
+                    Pill("Voltdeck n'a pas été appelé au dernier démarrage du téléphone", Tone.WARN)
+                }
+                serviceFailure?.let {
+                    Line(serviceFailureLabel(it), serviceFailureText(it, background.lastServiceStart, wallNow))
+                    if (serviceFailureUnresolved(it, background.lastServiceStart)) Pill(serviceFailurePill(it), Tone.WARN)
+                }
             }
         }
 
