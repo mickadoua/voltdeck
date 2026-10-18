@@ -124,13 +124,13 @@ internal object BackgroundPrefs {
 
     fun lastBootAttempt(context: Context) = read(context, "boot")
 
-    fun recordBootAttempt(context: Context, attempt: BootAttempt) = write(context, "boot", attempt)
+    fun recordBootAttempt(context: Context, attempt: BootAttempt) = store(context, "boot", attempt)
 
     fun lastServiceFailure(context: Context) = read(context, "serviceFailure")
 
-    fun recordServiceFailure(context: Context, attempt: BootAttempt) = write(context, "serviceFailure", attempt)
+    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
 
-    private fun write(context: Context, key: String, attempt: BootAttempt) {
+    private fun store(context: Context, key: String, attempt: BootAttempt) {
         prefs(context).edit()
             .putLong("${key}At", attempt.at.toEpochMilliseconds())
             .putString("${key}Outcome", attempt.outcome.name)
