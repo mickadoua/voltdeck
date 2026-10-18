@@ -19,11 +19,11 @@ class MainActivity : ComponentActivity() {
     private val notificationRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     private val bluetooth = object : BluetoothAccess {
-        override fun granted() = BLUETOOTH_PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+        override fun granted() = BluetoothPermissions.granted(this@MainActivity)
 
         override fun request(onResult: (Boolean) -> Unit) {
             pending = onResult
-            permissionRequest.launch(BLUETOOTH_PERMISSIONS)
+            permissionRequest.launch(BluetoothPermissions.REQUIRED)
         }
     }
 
@@ -35,14 +35,5 @@ class MainActivity : ComponentActivity() {
             notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent { App((application as VoltdeckApplication).runtime, bluetooth, background) }
-    }
-
-    private companion object {
-        val BLUETOOTH_PERMISSIONS =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-            } else {
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
     }
 }

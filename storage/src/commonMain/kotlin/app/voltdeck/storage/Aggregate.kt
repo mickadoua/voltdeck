@@ -40,3 +40,6 @@ val DERIVED_METRICS: Set<Metric> = setOf(
     Metric.CHARGE_OUT_AH,
     Metric.PV_ENERGY_WH,
 )
+
+/** Métriques indexées (`channel` = cellule ou sonde) : plusieurs séries par équipement, hors de la couverture. */
+val INDEXED_METRICS: Set<Metric> = setOf(Metric.CELL_VOLTAGE, Metric.TEMPERATURE)

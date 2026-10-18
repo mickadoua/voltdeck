@@ -14,11 +14,11 @@ import kotlinx.coroutines.SupervisorJob
 
 class VoltdeckApplication : Application() {
     val runtime: VoltdeckRuntime by lazy {
-        val prefs = getSharedPreferences("voltdeck-devices", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(DevicePrefs.FILE, Context.MODE_PRIVATE)
         VoltdeckRuntime(
             keys = AndroidKeystoreVictronKeyStore(this),
             shuntSetups = AndroidShuntSetupStore(this),
-            registry = TextDeviceRegistry({ prefs.getString(KEY_DEVICES, null) }, { prefs.edit().putString(KEY_DEVICES, it).apply() }),
+            registry = TextDeviceRegistry({ prefs.getString(DevicePrefs.KEY, null) }, { prefs.edit().putString(DevicePrefs.KEY, it).apply() }),
             transportFactory = { KableTransport() },
             databases = AndroidDatabases(this),
             scope = CoroutineScope(SupervisorJob() + collectorDispatcher()),
@@ -28,9 +28,11 @@ class VoltdeckApplication : Application() {
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun collectorDispatcher() = Dispatchers.Default.limitedParallelism(1)
 
-    private companion object {
-        const val KEY_DEVICES = "devices"
-    }
+}
+
+internal object DevicePrefs {
+    const val FILE = "voltdeck-devices"
+    const val KEY = "devices"
 }
 
 private class AndroidDatabases(private val context: Context) : Databases {

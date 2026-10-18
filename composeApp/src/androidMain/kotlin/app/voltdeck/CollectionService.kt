@@ -22,7 +22,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Garde le processus en vie écran éteint pour que [VoltdeckRuntime] continue de lire les équipements et d'enregistrer.
@@ -45,6 +47,7 @@ class CollectionService : Service() {
         try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification("Lecture des équipements en cours"), type)
         } catch (e: SecurityException) {
+            BackgroundPrefs.recordServiceFailure(this, BootAttempt(Clock.System.now(), BootOutcome.REFUSED, e.javaClass.simpleName))
             stopSelf()
             return START_NOT_STICKY
         }
@@ -112,6 +115,34 @@ internal object BackgroundPrefs {
     fun setEnabled(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean("enabled", value).apply()
     }
+
+    fun restartAfterBoot(context: Context) = prefs(context).getBoolean("restartAfterBoot", false)
+
+    fun setRestartAfterBoot(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean("restartAfterBoot", value).apply()
+    }
+
+    fun lastBootAttempt(context: Context) = read(context, "boot")
+
+    fun recordBootAttempt(context: Context, attempt: BootAttempt) = store(context, "boot", attempt)
+
+    fun lastServiceFailure(context: Context) = read(context, "serviceFailure")
+
+    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
+
+    private fun store(context: Context, key: String, attempt: BootAttempt) {
+        prefs(context).edit()
+            .putLong("${key}At", attempt.at.toEpochMilliseconds())
+            .putString("${key}Outcome", attempt.outcome.name)
+            .putString("${key}Detail", attempt.detail)
+            .apply()
+    }
+
+    private fun read(context: Context, key: String): BootAttempt? {
+        val p = prefs(context)
+        val outcome = p.getString("${key}Outcome", null)?.let { name -> BootOutcome.entries.firstOrNull { it.name == name } } ?: return null
+        return BootAttempt(Instant.fromEpochMilliseconds(p.getLong("${key}At", 0)), outcome, p.getString("${key}Detail", null))
+    }
 }
 
 internal class AndroidBackgroundCollection(private val context: Context, private val canConnect: () -> Boolean) : BackgroundCollection {
@@ -120,6 +151,14 @@ internal class AndroidBackgroundCollection(private val context: Context, private
     override var enabled: Boolean
         get() = BackgroundPrefs.enabled(context)
         set(value) = BackgroundPrefs.setEnabled(context, value)
+
+    override var restartAfterBoot: Boolean
+        get() = BackgroundPrefs.restartAfterBoot(context)
+        set(value) = BackgroundPrefs.setRestartAfterBoot(context, value)
+
+    override val lastBootAttempt get() = BackgroundPrefs.lastBootAttempt(context)
+
+    override val lastServiceFailure get() = BackgroundPrefs.lastServiceFailure(context)
 
     override fun sync(wanted: Boolean) {
         val intent = CollectionService.intent(context)

@@ -8,6 +8,7 @@ import app.voltdeck.storage.AggregateReader
 import app.voltdeck.storage.Level
 import app.voltdeck.storage.Nature
 import app.voltdeck.storage.SeriesKey
+import app.voltdeck.storage.CoverageReader
 import app.voltdeck.storage.db.VoltdeckDatabase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -44,6 +45,11 @@ class VoltdeckRuntimeTest {
     )
 
     @Test
+    fun theCoverageMarginCoversTheFlushPeriodPlusAClosedMinute() {
+        assertTrue(CoverageReader.DEFAULT_FLUSH_DELAY >= VoltdeckRuntime.FLUSH_PERIOD + 1.minutes)
+    }
+
+    @Test
     fun theDemoIsRecordedAndReadBackByTheStatistics() = runTest {
         var created = 0
         val databases = object : Databases {
@@ -77,6 +83,28 @@ class VoltdeckRuntimeTest {
         assertTrue(stats.produced!!.kwh > 0.0)
         assertTrue(stats.socMin!!.value <= stats.socMax!!.value)
         assertTrue(stats.soc.isNotEmpty())
+    }
+
+    @Test
+    fun theDiagnosticGetsRatesAndCoverageFromTheRunningSession() = runTest {
+        val db = memoryDatabase()
+        val runtime = runtime(object : Databases {
+            override fun real() = error("démo")
+            override fun freshDemo() = db
+        })
+        runtime.start()
+        advanceTimeBy(6.minutes)
+        runCurrent()
+        val now = runtime.session.value.clock.now()
+        val shunt = SimulatedPlant.SHUNT_ID
+        assertTrue(runtime.readingsPerMinute(shunt, now) > 0, "des mesures dans la dernière minute")
+        assertEquals(0, runtime.readingsPerMinute(shunt, now + 2.minutes), "la cadence retombe sans nouvelle mesure")
+        val coverage = runtime.coverage(shunt, now)!!
+        assertTrue(coverage.expected > 0, "$coverage")
+        assertTrue(coverage.ratio!! >= COVERAGE_TARGET, "$coverage")
+        assertEquals(null, VoltdeckRuntime(
+            InMemoryVictronKeyStore(), InMemoryShuntSetupStore(), InMemoryDeviceRegistry(), null, null, backgroundScope,
+        ).coverage(shunt, now), "sans base, pas de couverture")
     }
 
     @Test
