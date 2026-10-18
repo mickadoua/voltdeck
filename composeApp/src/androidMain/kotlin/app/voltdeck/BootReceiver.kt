@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 internal object BluetoothPermissions {
@@ -51,16 +52,50 @@ internal object BootRestart {
         conditions: () -> BootConditions,
         startService: () -> Unit,
         now: () -> Instant,
+        bootCount: () -> Int?,
         record: (BootAttempt) -> Unit,
     ) {
         if (action != Intent.ACTION_BOOT_COMPLETED) return
         val outcome = BootPolicy.decide(conditions())
-        if (outcome != BootOutcome.STARTED) return record(BootAttempt(now(), outcome))
+        if (outcome != BootOutcome.STARTED) return record(BootAttempt(now(), outcome, bootCount = bootCount()))
         try {
             startService()
-            record(BootAttempt(now(), BootOutcome.STARTED))
+            record(BootAttempt(now(), BootOutcome.STARTED, bootCount = bootCount()))
         } catch (e: Exception) {
-            record(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName))
+            record(BootAttempt(now(), startFailureOutcome(e), e.javaClass.simpleName, bootCount()))
+        }
+    }
+}
+
+/** Android refuse par une [SecurityException] ou une [IllegalStateException] ; toute autre exception est un bug à signaler. */
+internal fun startFailureOutcome(e: Exception) =
+    if (e is SecurityException || e is IllegalStateException) BootOutcome.REFUSED else BootOutcome.FAILED
+
+internal object ServiceStart {
+    /**
+     * Passe le service au premier plan. Android peut le refuser par une [SecurityException] (droit manquant) ou, dès
+     * l'API 31, par `ForegroundServiceStartNotAllowedException` (une [IllegalStateException]) : les deux sont notées au
+     * lieu de faire tomber le processus. Le refus reste affiché après un démarrage réussi (seul [recordStart] note
+     * celui-ci) : les mesures manquantes entre les deux ne disparaissent pas du Diagnostic. Toute autre exception est
+     * notée avec son type puis relancée, pour qu'un vrai bug ne soit pas pris pour un refus du système.
+     */
+    fun run(
+        startForeground: () -> Unit,
+        now: () -> Instant,
+        sinceBoot: () -> Duration,
+        bootCount: () -> Int?,
+        recordFailure: (BootAttempt) -> Unit,
+        recordStart: (BootAttempt) -> Unit,
+    ): Boolean {
+        fun attempt(outcome: BootOutcome, detail: String? = null) = BootAttempt(now(), outcome, detail, bootCount(), sinceBoot())
+        return try {
+            startForeground()
+            recordStart(attempt(BootOutcome.STARTED))
+            true
+        } catch (e: Exception) {
+            val outcome = startFailureOutcome(e)
+            recordFailure(attempt(outcome, e.javaClass.simpleName))
+            if (outcome == BootOutcome.REFUSED) false else throw e
         }
     }
 }
@@ -82,6 +117,7 @@ class BootReceiver : BroadcastReceiver() {
             },
             startService = { ContextCompat.startForegroundService(context, CollectionService.intent(context)) },
             now = { Clock.System.now() },
+            bootCount = { BackgroundPrefs.bootCount(context) },
             record = { BackgroundPrefs.recordBootAttempt(context, it) },
         )
     }

@@ -10,6 +10,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -23,6 +25,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -44,10 +47,16 @@ class CollectionService : Service() {
         }
         ensureChannel()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
-        try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification("Lecture des équipements en cours"), type)
-        } catch (e: SecurityException) {
-            BackgroundPrefs.recordServiceFailure(this, BootAttempt(Clock.System.now(), BootOutcome.REFUSED, e.javaClass.simpleName))
+        val first = notification("Lecture des équipements en cours")
+        val started = ServiceStart.run(
+            startForeground = { ServiceCompat.startForeground(this, NOTIFICATION_ID, first, type) },
+            now = { Clock.System.now() },
+            sinceBoot = { SystemClock.elapsedRealtime().milliseconds },
+            bootCount = { BackgroundPrefs.bootCount(this) },
+            recordFailure = { BackgroundPrefs.recordServiceFailure(this, it) },
+            recordStart = { BackgroundPrefs.recordServiceStart(this, it) },
+        )
+        if (!started) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -119,8 +128,16 @@ internal object BackgroundPrefs {
     fun restartAfterBoot(context: Context) = prefs(context).getBoolean("restartAfterBoot", false)
 
     fun setRestartAfterBoot(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean("restartAfterBoot", value).apply()
+        val edit = prefs(context).edit().putBoolean("restartAfterBoot", value)
+        val count = bootCount(context)
+        if (value && count != null) edit.putInt("restartEnabledAtBootCount", count) else edit.remove("restartEnabledAtBootCount")
+        edit.apply()
     }
+
+    fun restartEnabledAtBootCount(context: Context): Int? = prefs(context).takeIf { it.contains("restartEnabledAtBootCount") }?.getInt("restartEnabledAtBootCount", 0)
+
+    fun bootCount(context: Context): Int? =
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }
 
     fun lastBootAttempt(context: Context) = read(context, "boot")
 
@@ -128,20 +145,29 @@ internal object BackgroundPrefs {
 
     fun lastServiceFailure(context: Context) = read(context, "serviceFailure")
 
-    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
+    // commit() et non apply() : l'échec inattendu est relancé aussitôt et le processus meurt, avant la fin d'une écriture asynchrone.
+    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt, synchronous = true)
 
-    private fun store(context: Context, key: String, attempt: BootAttempt) {
+    fun lastServiceStart(context: Context) = read(context, "serviceStart")
+
+    fun recordServiceStart(context: Context, attempt: BootAttempt) = store(context, "serviceStart", attempt)
+
+    private fun store(context: Context, key: String, attempt: BootAttempt, synchronous: Boolean = false) {
         prefs(context).edit()
             .putLong("${key}At", attempt.at.toEpochMilliseconds())
             .putString("${key}Outcome", attempt.outcome.name)
             .putString("${key}Detail", attempt.detail)
-            .apply()
+            .putInt("${key}BootCount", attempt.bootCount ?: -1)
+            .putLong("${key}SinceBoot", attempt.sinceBoot?.inWholeMilliseconds ?: -1)
+            .let { if (synchronous) it.commit() else it.apply() }
     }
 
     private fun read(context: Context, key: String): BootAttempt? {
         val p = prefs(context)
         val outcome = p.getString("${key}Outcome", null)?.let { name -> BootOutcome.entries.firstOrNull { it.name == name } } ?: return null
-        return BootAttempt(Instant.fromEpochMilliseconds(p.getLong("${key}At", 0)), outcome, p.getString("${key}Detail", null))
+        return BootAttempt(Instant.fromEpochMilliseconds(p.getLong("${key}At", 0)), outcome, p.getString("${key}Detail", null), p.getInt("${key}BootCount", -1).takeIf { it >= 0 },
+            p.getLong("${key}SinceBoot", -1).takeIf { it >= 0 }?.milliseconds,
+        )
     }
 }
 
@@ -156,9 +182,15 @@ internal class AndroidBackgroundCollection(private val context: Context, private
         get() = BackgroundPrefs.restartAfterBoot(context)
         set(value) = BackgroundPrefs.setRestartAfterBoot(context, value)
 
+    override val bootCount get() = BackgroundPrefs.bootCount(context)
+
+    override val restartEnabledAtBootCount get() = BackgroundPrefs.restartEnabledAtBootCount(context)
+
     override val lastBootAttempt get() = BackgroundPrefs.lastBootAttempt(context)
 
     override val lastServiceFailure get() = BackgroundPrefs.lastServiceFailure(context)
+
+    override val lastServiceStart get() = BackgroundPrefs.lastServiceStart(context)
 
     override fun sync(wanted: Boolean) {
         val intent = CollectionService.intent(context)
