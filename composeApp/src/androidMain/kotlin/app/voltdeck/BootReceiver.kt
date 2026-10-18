@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 internal object BluetoothPermissions {
@@ -77,23 +78,26 @@ internal object ServiceStart {
     fun run(
         startForeground: () -> Unit,
         now: () -> Instant,
+        sinceBoot: () -> Duration,
         bootCount: () -> Int?,
         recordFailure: (BootAttempt) -> Unit,
-        recordStart: (Instant) -> Unit,
-    ): Boolean =
-        try {
+        recordStart: (BootAttempt) -> Unit,
+    ): Boolean {
+        fun attempt(outcome: BootOutcome, detail: String? = null) = BootAttempt(now(), outcome, detail, bootCount(), sinceBoot())
+        return try {
             startForeground()
-            recordStart(now())
+            recordStart(attempt(BootOutcome.STARTED))
             true
         } catch (e: Exception) {
             if (e is SecurityException || e is IllegalStateException) {
-                recordFailure(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName, bootCount()))
+                recordFailure(attempt(BootOutcome.REFUSED, e.javaClass.simpleName))
                 false
             } else {
-                recordFailure(BootAttempt(now(), BootOutcome.FAILED, e.javaClass.simpleName, bootCount()))
+                recordFailure(attempt(BootOutcome.FAILED, e.javaClass.simpleName))
                 throw e
             }
         }
+    }
 }
 
 /** Relance le service de collecte après le démarrage du téléphone, si [BootPolicy] l'autorise. */

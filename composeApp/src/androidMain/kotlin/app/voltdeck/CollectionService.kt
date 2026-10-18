@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -24,6 +25,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -49,6 +51,7 @@ class CollectionService : Service() {
         val started = ServiceStart.run(
             startForeground = { ServiceCompat.startForeground(this, NOTIFICATION_ID, first, type) },
             now = { Clock.System.now() },
+            sinceBoot = { SystemClock.elapsedRealtime().milliseconds },
             bootCount = { BackgroundPrefs.bootCount(this) },
             recordFailure = { BackgroundPrefs.recordServiceFailure(this, it) },
             recordStart = { BackgroundPrefs.recordServiceStart(this, it) },
@@ -144,12 +147,9 @@ internal object BackgroundPrefs {
 
     fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
 
-    fun lastServiceStart(context: Context): Instant? =
-        prefs(context).takeIf { it.contains("serviceStartAt") }?.let { Instant.fromEpochMilliseconds(it.getLong("serviceStartAt", 0)) }
+    fun lastServiceStart(context: Context) = read(context, "serviceStart")
 
-    fun recordServiceStart(context: Context, at: Instant) {
-        prefs(context).edit().putLong("serviceStartAt", at.toEpochMilliseconds()).apply()
-    }
+    fun recordServiceStart(context: Context, attempt: BootAttempt) = store(context, "serviceStart", attempt)
 
     private fun store(context: Context, key: String, attempt: BootAttempt) {
         prefs(context).edit()
@@ -157,13 +157,16 @@ internal object BackgroundPrefs {
             .putString("${key}Outcome", attempt.outcome.name)
             .putString("${key}Detail", attempt.detail)
             .putInt("${key}BootCount", attempt.bootCount ?: -1)
+            .putLong("${key}SinceBoot", attempt.sinceBoot?.inWholeMilliseconds ?: -1)
             .apply()
     }
 
     private fun read(context: Context, key: String): BootAttempt? {
         val p = prefs(context)
         val outcome = p.getString("${key}Outcome", null)?.let { name -> BootOutcome.entries.firstOrNull { it.name == name } } ?: return null
-        return BootAttempt(Instant.fromEpochMilliseconds(p.getLong("${key}At", 0)), outcome, p.getString("${key}Detail", null), p.getInt("${key}BootCount", -1).takeIf { it >= 0 })
+        return BootAttempt(Instant.fromEpochMilliseconds(p.getLong("${key}At", 0)), outcome, p.getString("${key}Detail", null), p.getInt("${key}BootCount", -1).takeIf { it >= 0 },
+            p.getLong("${key}SinceBoot", -1).takeIf { it >= 0 }?.milliseconds,
+        )
     }
 }
 

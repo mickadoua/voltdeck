@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class BootPolicyTest {
     private val ready = BootConditions(restartAfterBoot = true, collectionEnabled = true, hasDevices = true, bluetoothGranted = true)
@@ -48,9 +49,9 @@ class BootPolicyTest {
 
     private class Starts(val failure: Exception? = null) {
         val failures = mutableListOf<BootAttempt>()
-        val starts = mutableListOf<Instant>()
+        val starts = mutableListOf<BootAttempt>()
         fun run() = ServiceStart.run(
-            { failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { 7 }, { failures += it }, { starts += it },
+            { failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { 90.seconds }, { 7 }, { failures += it }, { starts += it },
         )
     }
 
@@ -58,7 +59,7 @@ class BootPolicyTest {
     fun aServiceStartAndroidForbidsInTheBackgroundIsRecordedInsteadOfCrashing() {
         val starts = Starts(IllegalStateException("message"))
         assertEquals(false, starts.run())
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException", 7)), starts.failures)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException", 7, 90.seconds)), starts.failures)
         assertEquals(emptyList(), starts.starts)
     }
 
@@ -66,14 +67,14 @@ class BootPolicyTest {
     fun aMissingRightIsRecordedTheSameWay() {
         val starts = Starts(SecurityException("message"))
         assertEquals(false, starts.run())
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "SecurityException", 7)), starts.failures)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "SecurityException", 7, 90.seconds)), starts.failures)
     }
 
     @Test
-    fun aSuccessfulStartIsNotedWithoutTouchingThePreviousRefusal() {
+    fun aSuccessfulStartIsNotedWithItsPhoneBootAndRecordsNoFailure() {
         val starts = Starts()
         assertEquals(true, starts.run())
-        assertEquals(listOf(t0), starts.starts)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.STARTED, null, 7, 90.seconds)), starts.starts)
         assertEquals(emptyList(), starts.failures)
     }
 
@@ -81,7 +82,7 @@ class BootPolicyTest {
     fun anUnrelatedBugLeavesItsTypeBehindThenPropagates() {
         val starts = Starts(UnsupportedOperationException())
         assertFailsWith<UnsupportedOperationException> { starts.run() }
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.FAILED, "UnsupportedOperationException", 7)), starts.failures)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.FAILED, "UnsupportedOperationException", 7, 90.seconds)), starts.failures)
         assertEquals(emptyList(), starts.starts)
     }
 
