@@ -65,13 +65,26 @@ fun bootAttemptText(attempt: BootAttempt?, now: Instant): String {
         BootOutcome.NO_DEVICE -> "non tentée : aucun équipement"
         BootOutcome.NO_PERMISSION -> "non tentée : permission Bluetooth retirée"
         BootOutcome.REFUSED -> "refusée par Android${attempt.detail?.let { " ($it)" }.orEmpty()}"
+        BootOutcome.FAILED -> "échec inattendu${attempt.detail?.let { " ($it)" }.orEmpty()}"
     }
     return "$what, ${ageText(now - attempt.at)}"
 }
 
 /** Un refus d'Android ou un droit retiré demandent une action de l'utilisateur (restriction du constructeur, droit à rendre). */
 fun bootAttemptIsProblem(attempt: BootAttempt?) =
-    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.NO_PERMISSION)
+    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.FAILED || attempt.outcome == BootOutcome.NO_PERMISSION)
+
+/** Le service ne tourne toujours pas depuis son dernier refus. Un refus suivi d'un démarrage reste affiché, mais n'alerte plus. */
+fun serviceFailureUnresolved(failure: BootAttempt?, lastStart: Instant?) =
+    failure != null && (lastStart == null || lastStart < failure.at)
+
+/** Quand le refus a eu lieu, à quel démarrage du téléphone il se rattache, et si le service a redémarré depuis. */
+fun serviceFailureText(failure: BootAttempt, lastStart: Instant?, now: Instant): String {
+    val kind = failure.detail ?: "refus"
+    val boot = failure.bootCount?.let { ", démarrage n° $it" }.orEmpty()
+    val since = if (serviceFailureUnresolved(failure, lastStart)) ", pas relancé depuis" else ", relancé depuis"
+    return "$kind, ${ageText(now - failure.at)}$boot$since"
+}
 
 /**
  * Le téléphone a redémarré depuis l'activation du réglage et le récepteur n'a rien noté pour ce démarrage : Android ne
@@ -148,8 +161,8 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection,
                     Pill("Voltdeck n'a pas été appelé au dernier démarrage du téléphone", Tone.WARN)
                 }
                 serviceFailure?.let {
-                    Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}")
-                    Pill("Android a refusé le service de collecte", Tone.WARN)
+                    Line("Service refusé par Android", serviceFailureText(it, background.lastServiceStart, wallNow))
+                    if (serviceFailureUnresolved(it, background.lastServiceStart)) Pill("Android a refusé le service de collecte", Tone.WARN)
                 }
             }
         }

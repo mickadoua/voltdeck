@@ -48,38 +48,41 @@ class BootPolicyTest {
 
     private class Starts(val failure: Exception? = null) {
         val failures = mutableListOf<BootAttempt>()
-        var cleared = 0
-        fun run() = ServiceStart.run({ failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { failures += it }, { cleared++ })
+        val starts = mutableListOf<Instant>()
+        fun run() = ServiceStart.run(
+            { failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { 7 }, { failures += it }, { starts += it },
+        )
     }
 
     @Test
     fun aServiceStartAndroidForbidsInTheBackgroundIsRecordedInsteadOfCrashing() {
         val starts = Starts(IllegalStateException("message"))
         assertEquals(false, starts.run())
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException")), starts.failures)
-        assertEquals(0, starts.cleared)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException", 7)), starts.failures)
+        assertEquals(emptyList(), starts.starts)
     }
 
     @Test
     fun aMissingRightIsRecordedTheSameWay() {
         val starts = Starts(SecurityException("message"))
         assertEquals(false, starts.run())
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "SecurityException")), starts.failures)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "SecurityException", 7)), starts.failures)
     }
 
     @Test
-    fun aSuccessfulStartClearsThePreviousRefusal() {
+    fun aSuccessfulStartIsNotedWithoutTouchingThePreviousRefusal() {
         val starts = Starts()
         assertEquals(true, starts.run())
-        assertEquals(1, starts.cleared)
+        assertEquals(listOf(t0), starts.starts)
         assertEquals(emptyList(), starts.failures)
     }
 
     @Test
-    fun anUnrelatedBugIsNotSwallowed() {
+    fun anUnrelatedBugLeavesItsTypeBehindThenPropagates() {
         val starts = Starts(UnsupportedOperationException())
         assertFailsWith<UnsupportedOperationException> { starts.run() }
-        assertEquals(emptyList(), starts.failures)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.FAILED, "UnsupportedOperationException", 7)), starts.failures)
+        assertEquals(emptyList(), starts.starts)
     }
 
     private class Run(val conditions: BootConditions, val failure: Exception? = null) {

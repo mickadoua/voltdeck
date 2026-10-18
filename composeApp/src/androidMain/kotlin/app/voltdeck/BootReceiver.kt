@@ -70,17 +70,29 @@ internal object ServiceStart {
     /**
      * Passe le service au premier plan. Android peut le refuser par une [SecurityException] (droit manquant) ou, dès
      * l'API 31, par `ForegroundServiceStartNotAllowedException` (une [IllegalStateException]) : les deux sont notées au
-     * lieu de faire tomber le processus, et un démarrage réussi efface le refus précédent.
+     * lieu de faire tomber le processus. Le refus reste affiché après un démarrage réussi (seul [recordStart] note
+     * celui-ci) : les mesures manquantes entre les deux ne disparaissent pas du Diagnostic. Toute autre exception est
+     * notée avec son type puis relancée, pour qu'un vrai bug ne soit pas pris pour un refus du système.
      */
-    fun run(startForeground: () -> Unit, now: () -> Instant, recordFailure: (BootAttempt) -> Unit, clearFailure: () -> Unit): Boolean =
+    fun run(
+        startForeground: () -> Unit,
+        now: () -> Instant,
+        bootCount: () -> Int?,
+        recordFailure: (BootAttempt) -> Unit,
+        recordStart: (Instant) -> Unit,
+    ): Boolean =
         try {
             startForeground()
-            clearFailure()
+            recordStart(now())
             true
         } catch (e: Exception) {
-            if (e !is SecurityException && e !is IllegalStateException) throw e
-            recordFailure(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName))
-            false
+            if (e is SecurityException || e is IllegalStateException) {
+                recordFailure(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName, bootCount()))
+                false
+            } else {
+                recordFailure(BootAttempt(now(), BootOutcome.FAILED, e.javaClass.simpleName, bootCount()))
+                throw e
+            }
         }
 }
 

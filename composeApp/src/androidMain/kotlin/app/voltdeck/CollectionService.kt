@@ -45,11 +45,13 @@ class CollectionService : Service() {
         }
         ensureChannel()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
+        val first = notification("Lecture des équipements en cours")
         val started = ServiceStart.run(
-            startForeground = { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification("Lecture des équipements en cours"), type) },
+            startForeground = { ServiceCompat.startForeground(this, NOTIFICATION_ID, first, type) },
             now = { Clock.System.now() },
+            bootCount = { BackgroundPrefs.bootCount(this) },
             recordFailure = { BackgroundPrefs.recordServiceFailure(this, it) },
-            clearFailure = { BackgroundPrefs.clearServiceFailure(this) },
+            recordStart = { BackgroundPrefs.recordServiceStart(this, it) },
         )
         if (!started) {
             stopSelf()
@@ -142,10 +144,11 @@ internal object BackgroundPrefs {
 
     fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
 
-    fun clearServiceFailure(context: Context) {
-        if (lastServiceFailure(context) != null) {
-            prefs(context).edit().remove("serviceFailureAt").remove("serviceFailureOutcome").remove("serviceFailureDetail").remove("serviceFailureBootCount").apply()
-        }
+    fun lastServiceStart(context: Context): Instant? =
+        prefs(context).takeIf { it.contains("serviceStartAt") }?.let { Instant.fromEpochMilliseconds(it.getLong("serviceStartAt", 0)) }
+
+    fun recordServiceStart(context: Context, at: Instant) {
+        prefs(context).edit().putLong("serviceStartAt", at.toEpochMilliseconds()).apply()
     }
 
     private fun store(context: Context, key: String, attempt: BootAttempt) {
@@ -182,6 +185,8 @@ internal class AndroidBackgroundCollection(private val context: Context, private
     override val lastBootAttempt get() = BackgroundPrefs.lastBootAttempt(context)
 
     override val lastServiceFailure get() = BackgroundPrefs.lastServiceFailure(context)
+
+    override val lastServiceStart get() = BackgroundPrefs.lastServiceStart(context)
 
     override fun sync(wanted: Boolean) {
         val intent = CollectionService.intent(context)

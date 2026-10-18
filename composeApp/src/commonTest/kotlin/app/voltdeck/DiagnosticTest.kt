@@ -75,7 +75,24 @@ class DiagnosticTest {
     @Test
     fun onlyAnAndroidRefusalOrARevokedPermissionIsFlaggedAsAProblem() {
         val flagged = BootOutcome.entries.filter { bootAttemptIsProblem(BootAttempt(t0, it)) }
-        assertEquals(listOf(BootOutcome.NO_PERMISSION, BootOutcome.REFUSED), flagged)
+        assertEquals(listOf(BootOutcome.NO_PERMISSION, BootOutcome.REFUSED, BootOutcome.FAILED), flagged)
         assertFalse(bootAttemptIsProblem(null))
+    }
+
+    @Test
+    fun aRefusalStaysVisibleAfterTheServiceRestartsButOnlyAlertsWhileItIsDown() {
+        val refusal = BootAttempt(t0 - 4.hours, BootOutcome.REFUSED, "ForegroundServiceStartNotAllowedException", 12)
+        assertTrue(serviceFailureUnresolved(refusal, null))
+        assertTrue(serviceFailureUnresolved(refusal, t0 - 5.hours), "un démarrage antérieur au refus ne le résout pas")
+        assertFalse(serviceFailureUnresolved(refusal, t0))
+        assertFalse(serviceFailureUnresolved(null, t0))
+        assertEquals(
+            "ForegroundServiceStartNotAllowedException, il y a 4 h, démarrage n° 12, pas relancé depuis",
+            serviceFailureText(refusal, null, t0),
+        )
+        assertEquals(
+            "ForegroundServiceStartNotAllowedException, il y a 4 h, démarrage n° 12, relancé depuis",
+            serviceFailureText(refusal, t0, t0),
+        )
     }
 }
