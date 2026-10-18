@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -27,12 +28,22 @@ import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.storage.AggRow
 import app.voltdeck.storage.AggregateReader
 import app.voltdeck.storage.SeriesKey
+import kotlinx.coroutines.delay
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 /** Fenêtre de la courbe d'historique d'un équipement. */
 private val HISTORY_WINDOW = 24.hours
+
+/** La courbe se relit à cette cadence : les agrégats sont à la minute, inutile de suivre chaque mesure. */
+private val HISTORY_REFRESH = 60.seconds
+
+/** Les 24 heures qui se terminent à [to] ; les deux bornes viennent du même instant pour que courbe et axe restent alignés. */
+class HistoryWindow(val to: Instant) {
+    val from: Instant get() = to - HISTORY_WINDOW
+}
 
 /** Un équipement en détail : mesure principale, courbe des 24 dernières heures, puis toutes ses mesures par rubrique. */
 @Composable
@@ -112,23 +123,29 @@ private fun HistoryCard(runtime: VoltdeckRuntime, device: KnownDevice, spec: His
     val p = LocalPalette.current
     val session by runtime.session.collectAsState()
     val database by runtime.database.collectAsState()
-    var rows by remember { mutableStateOf<List<AggRow>?>(null) }
-    val to = remember(session) { session.clock.now() }
-    LaunchedEffect(database, spec, changes, device.deviceId) {
-        val db = database ?: return@LaunchedEffect
-        val now = session.clock.now()
-        rows = AggregateReader(db).series(SeriesKey(device.deviceId, spec.metric), now - HISTORY_WINDOW, now, now, runtime.zone).rows
+    var loaded by remember { mutableStateOf<Pair<HistoryWindow, List<AggRow>>?>(null) }
+    val now by produceState(session.clock.now(), session) {
+        while (true) {
+            delay(HISTORY_REFRESH)
+            value = session.clock.now()
+        }
     }
-    val from = to - HISTORY_WINDOW
+    LaunchedEffect(database, spec, changes, device.deviceId, now) {
+        val db = database ?: return@LaunchedEffect
+        val window = HistoryWindow(now)
+        loaded = window to AggregateReader(db).series(SeriesKey(device.deviceId, spec.metric), window.from, window.to, window.to, runtime.zone).rows
+    }
     Card(Modifier.fillMaxWidth()) {
         Txt(spec.title, 17.sp, FontWeight.Bold)
-        val loaded = rows
-        if (loaded == null) {
+        val shown = loaded
+        if (shown == null) {
             Txt("Chargement…", 14.sp, color = p.ink2)
-        } else if (loaded.isEmpty()) {
+        } else if (shown.second.isEmpty()) {
             Txt("Aucune mesure enregistrée sur les dernières 24 heures.", 14.sp, color = p.ink2)
         } else {
-            val segments = remember(loaded, from) { segmentsOf(loaded, from) }
+            val (window, rows) = shown
+            val from = window.from
+            val segments = remember(shown) { segmentsOf(rows, from) }
             SegmentedLineChart(
                 segments = segments,
                 color = if (spec.metric == app.voltdeck.core.Metric.PV_POWER) p.solar else p.battery,

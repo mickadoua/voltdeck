@@ -45,6 +45,8 @@ import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 
+private fun whOrDash(v: Double?) = v?.let { "${frDecimal(it, 0)} Wh" } ?: DASH
+
 /** Zoom maximal au pincement : assez pour lire une heure dans un mois, sans aller jusqu'à une colonne plein écran. */
 private const val MAX_ZOOM = 8f
 
@@ -88,7 +90,7 @@ fun EnergyChart(columns: EnergyColumns, slotLabel: (Int) -> String, description:
     val p = LocalPalette.current
     val producer = remember { CartesianChartModelProducer() }
     LaunchedEffect(columns) {
-        producer.runTransaction { columnSeries { series(columns.produced); series(columns.consumed) } }
+        producer.runTransaction { columnSeries { series(columns.producedDrawn); series(columns.consumedDrawn) } }
     }
     val thickness: Dp = if (columns.produced.size > 24) 5.dp else 8.dp
     VoltdeckVicoTheme {
@@ -121,7 +123,7 @@ fun EnergyChart(columns: EnergyColumns, slotLabel: (Int) -> String, description:
                         if (target == null || at == null) {
                             DASH
                         } else {
-                            "${slotLabel(at)} · produite ${frDecimal(columns.produced[at], 0)} Wh · consommée ${frDecimal(columns.consumed[at], 0)} Wh"
+                            "${slotLabel(at)} · produite ${whOrDash(columns.produced[at])} · consommée ${whOrDash(columns.consumed[at])}"
                         }
                     },
                 ),

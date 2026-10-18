@@ -100,19 +100,49 @@ fun variation(current: EnergyTotal?, previous: EnergyTotal?): Double? {
     return (current.kwh - previous.kwh) / previous.kwh * 100.0
 }
 
-/** Variation sur [days] jours ; [partial] quand la période en cours n'est pas terminée et que seuls ses premiers jours sont comparés. */
-data class Comparison(val percent: Double, val days: Int, val partial: Boolean)
+/** Sur quelle base deux périodes sont comparées. */
+enum class ComparisonBasis {
+    /** Période terminée contre la précédente de même longueur. */
+    WHOLE,
+
+    /** Les premiers jours de chaque période (période entamée, ou mois de longueurs différentes). */
+    FIRST_DAYS,
+
+    /** Seuls les jours mesurés des deux côtés : il manque des jours d'un côté ou de l'autre. */
+    COMMON_DAYS,
+}
+
+/** Variation en % sur [days] jours comparés, la base étant donnée par [basis]. */
+data class Comparison(val percent: Double, val days: Int, val basis: ComparisonBasis)
 
 /**
- * Jours à comparer : toute la période si elle est terminée, sinon ses seuls jours terminés face aux
- * mêmes premiers jours de la période précédente (jamais une période entamée contre une période complète).
+ * Jours à comparer : les mêmes premiers jours des deux périodes, limités aux jours terminés de la période
+ * en cours (jamais une période entamée contre une période complète, ni un mois de 31 jours contre un de 30).
  */
 fun comparableDays(period: StatsPeriod, today: LocalDate): Pair<List<LocalDate>, List<LocalDate>> {
     val previousDays = period.previous().days
-    if (period.days.last() < today) return period.days to previousDays
-    val finished = period.days.filter { it < today }
-    val n = minOf(finished.size, previousDays.size)
-    return finished.take(n) to previousDays.take(n)
+    val current = period.days.filter { it < today }
+    val n = minOf(current.size, previousDays.size)
+    return current.take(n) to previousDays.take(n)
+}
+
+/**
+ * Compare deux listes d'énergie par rang de jour (`null` = jour sans mesure). Seuls les rangs mesurés des deux côtés
+ * comptent : sinon une période précédente à moitié collectée gonflerait la variation. `null` si aucun rang n'est commun.
+ */
+fun compareEnergy(current: List<Double?>, previous: List<Double?>, wholePeriods: Boolean): Comparison? {
+    val pairs = current.zip(previous).mapNotNull { (c, p) -> if (c != null && p != null) c to p else null }
+    if (pairs.isEmpty()) return null
+    val percent = variation(
+        EnergyTotal(pairs.sumOf { it.first }, false, null),
+        EnergyTotal(pairs.sumOf { it.second }, false, null),
+    ) ?: return null
+    val basis = when {
+        pairs.size < current.size -> ComparisonBasis.COMMON_DAYS
+        wholePeriods -> ComparisonBasis.WHOLE
+        else -> ComparisonBasis.FIRST_DAYS
+    }
+    return Comparison(percent, pairs.size, basis)
 }
 
 fun loadStats(
@@ -147,9 +177,9 @@ fun loadStats(
     fun max(rows: List<AggRow>) = rows.maxByOrNull { it.stats.max }?.let { Extremum(it.stats.max, it.start) }
 
     val (currentDays, previousDays) = comparableDays(period, today)
-    val partial = currentDays.size < period.days.size
-    fun comparison(current: EnergyTotal?, previous: EnergyTotal?) =
-        variation(current, previous)?.let { Comparison(it, currentDays.size, partial) }
+    val wholePeriods = currentDays.size == period.days.size && previousDays.size == period.days.size
+    fun producedKwh(dates: List<LocalDate>) = dates.map { stats.solarProduction(it, zone).value }
+    fun consumedKwh(dates: List<LocalDate>) = dates.map { stats.consumption(it, zone, now).value?.div(1000.0) }
 
     return StatsData(
         period = period,
@@ -157,8 +187,8 @@ fun loadStats(
         buckets = if (to > from) history.buckets(level, from, to, zone) else emptyList(),
         produced = produced(period.days),
         consumed = consumed(period.days),
-        producedComparison = comparison(produced(currentDays), produced(previousDays)),
-        consumedComparison = comparison(consumed(currentDays), consumed(previousDays)),
+        producedComparison = compareEnergy(producedKwh(currentDays), producedKwh(previousDays), wholePeriods),
+        consumedComparison = compareEnergy(consumedKwh(currentDays), consumedKwh(previousDays), wholePeriods),
         soc = soc,
         socMin = min(soc),
         socMax = max(soc),

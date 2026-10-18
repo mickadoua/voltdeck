@@ -42,11 +42,22 @@ class DeviceDetailTest {
     fun anAbsentFieldIsHiddenButAMeasuredZeroIsShown() {
         val d = deviceDetail(DeviceRole.SOLAR_CHARGER, reading(s(Metric.PV_POWER, 0.0), s(Metric.BATTERY_VOLTAGE, 13.1)))
         assertEquals("0", d.hero?.number)
-        assertNull(d.row("Courant de charge"))
+        assertNull(d.row("Courant de la sortie load"))
         assertNull(d.row("Courant vers la batterie"))
         assertNull(d.row("Puissance vers la batterie"))
         assertNotNull(d.row("Tension batterie"))
         assertNull(d.sections.firstOrNull { it.title == "État" })
+    }
+
+    @Test
+    fun theLoadOutputCurrentIsNotMistakenForTheBatteryChargeCurrent() {
+        val d = deviceDetail(
+            DeviceRole.SOLAR_CHARGER,
+            reading(s(Metric.PV_POWER, 210.0), s(Metric.BATTERY_VOLTAGE, 13.5), s(Metric.BATTERY_CURRENT, 14.0), s(Metric.LOAD_CURRENT, 2.0)),
+        )
+        assertEquals("14,0 A", d.row("Courant vers la batterie")?.value)
+        assertEquals("2,0 A", d.row("Courant de la sortie load")?.value)
+        assertNull(d.row("Courant de charge"))
     }
 
     @Test

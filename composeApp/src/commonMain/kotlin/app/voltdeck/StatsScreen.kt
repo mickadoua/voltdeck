@@ -175,7 +175,11 @@ private fun TotalCard(title: String, total: EnergyTotal?, comparison: Comparison
         if (total != null && total.calculated) Tag("calculée")
         total?.coverage?.takeIf { it < 0.99 }?.let { Txt("Couverture ${frDecimal(it * 100, 0)} %", 12.sp, color = p.muted) }
         comparison?.let {
-            val against = if (it.partial) "les ${it.days} premiers jours de la période précédente" else "la période précédente"
+            val against = when (it.basis) {
+                ComparisonBasis.WHOLE -> "la période précédente"
+                ComparisonBasis.FIRST_DAYS -> if (it.days == 1) "le premier jour de la période précédente" else "les ${it.days} premiers jours de la période précédente"
+                ComparisonBasis.COMMON_DAYS -> if (it.days == 1) "le seul jour mesuré des deux périodes" else "les ${it.days} jours mesurés des deux périodes"
+            }
             Txt("${signedFr(it.percent, 0)} % vs $against", 12.sp, FontWeight.SemiBold, p.ink2)
         }
     }
@@ -206,7 +210,7 @@ fun niceCeiling(max: Double): Double {
 private fun EnergyBars(slots: List<Instant>, d: StatsData, zone: TimeZone) {
     val p = LocalPalette.current
     val columns = remember(d, slots) { energyColumns(slots, d.buckets) }
-    val peak = columns.produced.withIndex().maxByOrNull { it.value }?.takeIf { it.value > 0 }?.index
+    val peak = columns.producedDrawn.withIndex().maxByOrNull { it.value }?.takeIf { it.value > 0 }?.index
     Txt("Touchez une colonne pour lire ses valeurs. Pincez pour zoomer, glissez pour défiler.", 13.sp, FontWeight.SemiBold, p.muted)
     EnergyChart(
         columns = columns,

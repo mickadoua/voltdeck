@@ -109,7 +109,7 @@ private fun solarDetail(r: Reading): DeviceDetail {
                 row("Tension batterie", voltage, "V", 2),
                 row("Courant vers la batterie", current, "A", 1),
                 row("Puissance vers la batterie", power(voltage, current), "W", 0, CALCULATED),
-                row("Courant de charge", r.value(Metric.LOAD_CURRENT), "A", 1),
+                row("Courant de la sortie load", r.value(Metric.LOAD_CURRENT), "A", 1),
             ),
             section(
                 "État",

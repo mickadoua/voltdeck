@@ -5,6 +5,7 @@ import app.voltdeck.storage.AggStats
 import app.voltdeck.storage.EnergyBucket
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
@@ -49,17 +50,37 @@ class ChartModelTest {
     }
 
     @Test
-    fun energyColumnsKeepEverySlotAndLeaveUnmeasuredOnesEmpty() {
+    fun anUnmeasuredSlotStaysNullForTheReadoutAndIsDrawnEmpty() {
         val slots = (0..2).map { t0 + it.hours }
         val columns = energyColumns(slots, listOf(EnergyBucket(slots[1], 120.0, null, 80.0)))
-        assertEquals(listOf(0.0, 120.0, 0.0), columns.produced)
-        assertEquals(listOf(0.0, 80.0, 0.0), columns.consumed)
+        assertEquals(listOf(null, 120.0, null), columns.produced)
+        assertEquals(listOf(null, 80.0, null), columns.consumed)
+        assertEquals(listOf(0.0, 120.0, 0.0), columns.producedDrawn)
+        assertEquals(listOf(0.0, 80.0, 0.0), columns.consumedDrawn)
     }
 
     @Test
-    fun aNegativeCalculatedConsumptionIsNotDrawnBelowTheAxis() {
+    fun aSystemWithoutSolarNeverReadsZeroProduced() {
+        val slots = listOf(t0)
+        val columns = energyColumns(slots, listOf(EnergyBucket(t0, null, null, 40.0)))
+        assertNull(columns.produced.single())
+        assertEquals(40.0, columns.consumed.single())
+    }
+
+    @Test
+    fun aNegativeCalculatedConsumptionIsReportedAsIsButNotDrawnBelowTheAxis() {
         val slots = listOf(t0)
         val columns = energyColumns(slots, listOf(EnergyBucket(t0, 10.0, null, -5.0)))
-        assertEquals(listOf(0.0), columns.consumed)
+        assertEquals(-5.0, columns.consumed.single())
+        assertEquals(listOf(0.0), columns.consumedDrawn)
+    }
+
+    @Test
+    fun theHistoryWindowFollowsItsEndInsteadOfFreezingAtOpening() {
+        val opened = HistoryWindow(t0)
+        val anHourLater = HistoryWindow(t0 + 1.hours)
+        assertEquals(t0 - 24.hours, opened.from)
+        assertEquals(t0 + 1.hours - 24.hours, anHourLater.from)
+        assertEquals(t0 + 1.hours, anHourLater.to)
     }
 }

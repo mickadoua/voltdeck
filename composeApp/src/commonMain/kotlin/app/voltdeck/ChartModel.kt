@@ -33,14 +33,20 @@ fun segmentsOf(rows: List<AggRow>, from: Instant): List<Segment> {
     return segments
 }
 
-/** Colonnes d'énergie : un créneau sans mesure vaut 0 (colonne vide) ; le tableau, lui, affiche « — ». */
-class EnergyColumns(val produced: List<Double>, val consumed: List<Double>)
+/**
+ * Colonnes d'énergie. [produced] et [consumed] gardent la valeur lue (`null` = pas de mesure, à lire « — »,
+ * comme le tableau) ; seules [producedDrawn] et [consumedDrawn] servent au dessin : colonne vide et jamais sous l'axe.
+ */
+class EnergyColumns(val produced: List<Double?>, val consumed: List<Double?>) {
+    val producedDrawn: List<Double> = produced.map { (it ?: 0.0).coerceAtLeast(0.0) }
+    val consumedDrawn: List<Double> = consumed.map { (it ?: 0.0).coerceAtLeast(0.0) }
+}
 
 fun energyColumns(slots: List<Instant>, buckets: List<EnergyBucket>): EnergyColumns {
     val byStart = buckets.associateBy { it.start }
     return EnergyColumns(
-        slots.map { byStart[it]?.producedWh?.coerceAtLeast(0.0) ?: 0.0 },
-        slots.map { byStart[it]?.consumedWh?.coerceAtLeast(0.0) ?: 0.0 },
+        slots.map { byStart[it]?.producedWh },
+        slots.map { byStart[it]?.consumedWh },
     )
 }
 
