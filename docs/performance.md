@@ -8,7 +8,7 @@ Critère : un graphique d'un an s'ouvre en **moins de 300 ms** et le zoom/défil
 |---|---|---|
 | Temps de `loadStats` par période | `StatsPerformanceTest` (JVM, SQLite en mémoire, médiane de 5 passes, lignes `PERF` dans la sortie du test) | automatisé |
 | Taille de fenêtre au zoom maximal | `ChartModelTest` (`atMaxZoom…`) | automatisé |
-| 60 i/s au zoom et au défilement | téléphone réel | **à faire par le fondateur** (procédure ci-dessous) |
+| 60 i/s au zoom et au défilement | téléphone réel | **à mesurer sur téléphone** (procédure ci-dessous) |
 
 Les chiffres JVM ne sont pas ceux d'un téléphone : ils bornent le coût des requêtes et du calcul, pas le dessin.
 
@@ -30,7 +30,7 @@ Avant optimisation, la vue Année complète coûtait ~1,3 s.
 - Chargement **en deux temps** pour l'Année : graphique et totaux d'abord (`comparisons = false`), comparaisons ensuite. Le critère de 300 ms porte sur le premier affichage ; les comparaisons arrivent après, sans bloquer.
 - `loadStats` tourne sur `Dispatchers.Default`, plus sur le fil principal.
 
-## Zoom et `getXStep` (constat 4 de Victor, PR #9)
+## Zoom et `getXStep` (constat de revue, PR #9)
 
 Le pas de l'axe était fixé à 1 minute y compris pour les séries horaires et journalières, avec un zoom maximal de 8 pas. Sur une semaine de points horaires ou un an de points journaliers, le zoom maximal n'affichait donc qu'environ 1 point.
 
