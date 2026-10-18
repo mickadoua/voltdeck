@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
@@ -38,6 +39,7 @@ import com.patrykandpatrick.vico.compose.cartesian.marker.DefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.cartesian.VicoZoomState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.common.Fill
 import com.patrykandpatrick.vico.compose.common.Insets
@@ -53,8 +55,19 @@ private const val MINUTES_PER_DAY = 24 * 60
 
 private fun whOrDash(v: Double?) = v?.let { "${frDecimal(it, 0)} Wh" } ?: DASH
 
-/** Zoom maximal au pincement : assez pour lire une heure dans un mois, sans aller jusqu'à une colonne plein écran. */
-private const val MAX_ZOOM = 8f
+/** Zoom maximal des colonnes d'énergie : assez pour lire un créneau dans un mois, sans aller jusqu'à une colonne plein écran. */
+private val ColumnsMaxZoom: Zoom = Zoom.max(Zoom.fixed(8f), Zoom.Content)
+
+/**
+ * État de zoom d'une courbe : de tout le contenu à une fenêtre de [closestWindowMinutes] minutes, jamais au-delà.
+ * Les bornes sont mémorisées : Vico recrée l'état de zoom dès que l'une d'elles change d'instance, ce qui rendait la courbe
+ * à son zoom initial à chaque nouvelle mesure.
+ */
+@Composable
+internal fun rememberLineZoomState(closestWindowMinutes: Double): VicoZoomState {
+    val maxZoom = remember(closestWindowMinutes) { Zoom.max(Zoom.x(closestWindowMinutes), Zoom.Content) }
+    return rememberVicoZoomState(initialZoom = Zoom.Content, minZoom = Zoom.Content, maxZoom = maxZoom)
+}
 
 @Composable
 private fun VoltdeckVicoTheme(content: @Composable () -> Unit) {
@@ -136,13 +149,10 @@ fun EnergyChart(columns: EnergyColumns, slotLabel: (Int) -> String, description:
             ),
             modelProducer = producer,
             modifier = modifier.semantics { contentDescription = description },
-            zoomState = rememberVicoZoomState(initialZoom = Zoom.Content, minZoom = Zoom.Content, maxZoom = Zoom.max(Zoom.fixed(MAX_ZOOM), Zoom.Content)),
+            zoomState = rememberVicoZoomState(initialZoom = Zoom.Content, minZoom = Zoom.Content, maxZoom = ColumnsMaxZoom),
         )
     }
 }
-
-/** Pas de l'axe horizontal : 1 minute. Imposé pour que Vico ne le déduise pas (PGCD) des écarts mesurés. */
-private val MinuteStep: (CartesianChartModel) -> Double = { 1.0 }
 
 /** Axe des x en minutes : début ramené sur un multiple de [alignMinutes] pour que les repères tombent sur des heures ou des jours pleins. */
 private class MinuteAlignedRange(
@@ -170,6 +180,7 @@ fun SegmentedLineChart(
     description: String,
     modifier: Modifier = Modifier,
     fixedY: ClosedFloatingPointRange<Double>? = null,
+    zoomState: VicoZoomState = rememberLineZoomState(closestWindowMinutes(xStepOf(segments))),
 ) {
     val p = LocalPalette.current
     val producer = remember { CartesianChartModelProducer() }
@@ -183,6 +194,8 @@ fun SegmentedLineChart(
             pointProvider = if (segment.x.size == 1) LineCartesianLayer.PointProvider.single(LineCartesianLayer.Point(dot, 8.dp)) else null,
         )
     }
+    val xStep = remember(segments) { xStepOf(segments) }
+    val getXStep = remember(xStep) { { _: CartesianChartModel -> xStep } }
     val range = remember(fixedY, labelEveryMinutes) {
         val y = if (fixedY != null) CartesianLayerRangeProvider.fixed(minY = fixedY.start, maxY = fixedY.endInclusive) else CartesianLayerRangeProvider.auto()
         MinuteAlignedRange(if (labelEveryMinutes >= MINUTES_PER_DAY) MINUTES_PER_DAY.toDouble() else MINUTES_PER_HOUR.toDouble(), y)
@@ -204,7 +217,9 @@ fun SegmentedLineChart(
                     label = axisLabel(),
                     guideline = null,
                     valueFormatter = CartesianValueFormatter { _, v, _ -> tickLabel(v) },
-                    itemPlacer = remember(labelEveryMinutes) { HorizontalAxis.ItemPlacer.aligned(spacing = { labelEveryMinutes }) },
+                    itemPlacer = remember(labelEveryMinutes, xStep) {
+                        HorizontalAxis.ItemPlacer.aligned(spacing = { (labelEveryMinutes / xStep).roundToInt().coerceAtLeast(1) })
+                    },
                 ),
                 marker = rememberDefaultCartesianMarker(
                     label = markerLabel(),
@@ -213,11 +228,11 @@ fun SegmentedLineChart(
                         if (point == null) DASH else "${xLabel(point.entry.x)} · ${frDecimal(point.entry.y, decimals)} $unit"
                     },
                 ),
-                getXStep = MinuteStep,
+                getXStep = getXStep,
             ),
             modelProducer = producer,
             modifier = modifier.semantics { contentDescription = description },
-            zoomState = rememberVicoZoomState(initialZoom = Zoom.Content, minZoom = Zoom.Content, maxZoom = Zoom.max(Zoom.fixed(MAX_ZOOM), Zoom.Content)),
+            zoomState = zoomState,
         )
     }
 }

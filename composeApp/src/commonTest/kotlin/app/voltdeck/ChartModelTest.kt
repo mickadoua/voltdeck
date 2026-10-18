@@ -146,4 +146,53 @@ class ChartModelTest {
         val expected = (1..31).map { "2026-03-" + it.toString().padStart(2, '0') }
         assertEquals(expected, dayTicks(2026, 3, 31))
     }
+
+    private fun segmentOf(vararg x: Double) = Segment(x.toList(), x.map { 1.0 })
+
+    @Test
+    fun theAxisStepIsTheUsualGapNotAFixedMinute() {
+        val hourly = segmentsOf((0 until 100).map { row(it, 50.0) }, t0)
+        assertEquals(60.0, xStepOf(hourly))
+        val daily = segmentsOf((0 until 100).map { AggRow(t0 + (it * 24).hours, AggStats(1, 1.0, 1.0, 1.0, 1.0)) }, t0)
+        assertEquals(1440.0, xStepOf(daily))
+    }
+
+    @Test
+    fun anOddGapDoesNotChangeTheStep() {
+        assertEquals(60.0, xStepOf(listOf(segmentOf(0.0, 60.0, 120.0, 180.0, 240.0, 305.0))))
+        assertEquals(60.0, xStepOf(listOf(segmentOf(0.0, 60.0, 120.0), segmentOf(1000.0, 1060.0, 1120.0, 1185.0))))
+    }
+
+    @Test
+    fun withoutTwoPointsInASegmentTheStepIsOneMinute() {
+        assertEquals(1.0, xStepOf(emptyList()))
+        assertEquals(1.0, xStepOf(listOf(segmentOf(5.0), segmentOf(9.0))))
+    }
+
+    @Test
+    fun theClosestWindowShowsAtLeastTwelvePointsAndAnHour() {
+        assertEquals(60.0, closestWindowMinutes(1.0))
+        assertEquals(12.0 * 5.0, closestWindowMinutes(5.0), 0.0)
+        assertEquals(12.0 * 60.0, closestWindowMinutes(60.0))
+        assertEquals(12.0 * 1440.0, closestWindowMinutes(1440.0))
+    }
+
+    /** Le zoom maximal affiche [closestWindowMinutes] ; divisé par le pas de l'axe, c'est le nombre de points lisibles à l'écran. */
+    private fun pointsAtMaxZoom(segments: List<Segment>) = closestWindowMinutes(xStepOf(segments)) / xStepOf(segments)
+
+    @Test
+    fun atMaxZoomAWeekOfHourlyPointsAndAYearOfDailyPointsStillShowTwelvePoints() {
+        val week = segmentsOf((0 until 168).map { row(it, 50.0) }, t0)
+        val year = segmentsOf((0 until 365).map { AggRow(t0 + (it * 24).hours, AggStats(1, 1.0, 1.0, 1.0, 1.0)) }, t0)
+        assertEquals(12.0, pointsAtMaxZoom(week))
+        assertEquals(12.0, pointsAtMaxZoom(year))
+        // Avec l'ancien pas fixe d'une minute et un zoom limité à 8 minutes d'écran : moins de 1 point sur une série horaire.
+        assertTrue(closestWindowMinutes(1.0) / xStepOf(week) < 2.0)
+    }
+
+    @Test
+    fun atMaxZoomADayOfMinutePointsShowsAnHour() {
+        val day = segmentsOf((0 until 1_440).map { AggRow(t0 + it.minutes, AggStats(1, 1.0, 1.0, 1.0, 1.0)) }, t0)
+        assertEquals(60.0, pointsAtMaxZoom(day))
+    }
 }

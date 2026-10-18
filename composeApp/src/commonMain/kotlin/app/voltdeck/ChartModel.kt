@@ -46,6 +46,22 @@ fun segmentsOf(rows: List<AggRow>, origin: Instant): List<Segment> {
     return segments
 }
 
+/**
+ * Pas de l'axe horizontal, en minutes : l'écart habituel (médiane) entre deux points d'un même tronçon, 1 si aucun tronçon n'en a deux.
+ * Vico déduirait le pas du PGCD des écarts, instable dès qu'un écart sort du lot (changement d'heure). Un pas fixé à 1 minute, lui,
+ * donnait à une série horaire 60 fois sa largeur : le zoom maximal tombait à quelques minutes d'une semaine, et aux limites du
+ * dessin (coordonnées à des dizaines de millions de pixels) pour un an.
+ */
+fun xStepOf(segments: List<Segment>): Double {
+    val gaps = segments.flatMap { it.x.zipWithNext { a, b -> b - a } }.filter { it > 0.0 }.sorted()
+    return gaps.getOrNull(gaps.size / 2) ?: 1.0
+}
+
+/** Fenêtre la plus étroite qu'on puisse atteindre au pincement : [MIN_VISIBLE_POINTS] points, et au moins une heure. */
+fun closestWindowMinutes(step: Double): Double = maxOf(step * MIN_VISIBLE_POINTS, 60.0)
+
+const val MIN_VISIBLE_POINTS = 12
+
 /** L'instant représenté par un x de [Segment] (minutes depuis [origin]). */
 fun instantAt(origin: Instant, minutes: Double): Instant = origin + minutes.roundToLong().minutes
 

@@ -39,8 +39,12 @@ import app.voltdeck.storage.AggRow
 import app.voltdeck.storage.AggregateReader
 import app.voltdeck.storage.EnergyBucket
 import app.voltdeck.storage.Level
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.log10
 import kotlin.math.pow
@@ -63,11 +67,16 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
         val stats = runtime.stats()
         val history = runtime.energyHistory()
         val db = database
-        data = if (stats == null || history == null || db == null) {
-            null
-        } else {
-            loadStats(stats, history, AggregateReader(db), battery, period, runtime.zone, session.clock.now())
+        if (stats == null || history == null || db == null) {
+            data = null
+            return@LaunchedEffect
         }
+        val now = session.clock.now()
+        fun load(comparisons: Boolean) = loadStats(stats, history, AggregateReader(db), battery, period, runtime.zone, now, comparisons)
+        if (period.kind == PeriodKind.YEAR && data?.period != period) {
+            data = withContext(Dispatchers.Default) { load(comparisons = false) }
+        }
+        data = withContext(Dispatchers.Default) { load(comparisons = true) }
     }
 
     Column(
@@ -85,7 +94,9 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
                         .clickable(role = Role.Tab) { period = StatsPeriod(kind, period.anchor) }
                         .semantics { selected = active },
                     contentAlignment = Alignment.Center,
-                ) { Txt(kind.label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2) }
+                ) {
+                    Txt(kind.label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2, oneLine = true, shortText = "Sem.".takeIf { kind == PeriodKind.WEEK })
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -115,7 +126,7 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
 
         Card(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Txt(if (d.level == Level.HOUR) "Énergie par heure (Wh)" else "Énergie par jour (Wh)", 17.sp, FontWeight.Bold, modifier = Modifier.weight(1f))
+                Txt(when (d.level) { Level.HOUR -> "Énergie par heure (Wh)"; Level.MONTH -> "Énergie par mois (Wh)"; else -> "Énergie par jour (Wh)" }, 17.sp, FontWeight.Bold, modifier = Modifier.weight(1f))
                 Txt(
                     if (table) "Graphique" else "Tableau", 14.sp, FontWeight.SemiBold, p.ink,
                     Modifier.border(1.5.dp, p.ink, RoundedCornerShape(12.dp)).clickable(role = Role.Button) { table = !table }.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -152,17 +163,23 @@ private fun batteryOf(session: Session, runtime: VoltdeckRuntime): DeviceId? =
         ?: session.devices.firstOrNull { it.role == DeviceRole.BATTERY }?.deviceId
 
 /** Créneaux de la période : 24 heures ou un par jour, présents même sans mesure (un trou se voit). */
-private fun slotsOf(d: StatsData, zone: TimeZone): List<Instant> = if (d.level == Level.HOUR) {
-    val start = d.period.first.atStartOfDayIn(zone)
-    val end = d.period.endExclusive.atStartOfDayIn(zone)
-    generateSequence(start) { it + 1.hours }.takeWhile { it < end }.toList()
-} else {
-    d.period.days.map { it.atStartOfDayIn(zone) }
+private fun slotsOf(d: StatsData, zone: TimeZone): List<Instant> = when (d.level) {
+    Level.HOUR -> {
+        val start = d.period.first.atStartOfDayIn(zone)
+        val end = d.period.endExclusive.atStartOfDayIn(zone)
+        generateSequence(start) { it + 1.hours }.takeWhile { it < end }.toList()
+    }
+    Level.MONTH -> (0 until 12).map { d.period.first.plus(it, DateTimeUnit.MONTH).atStartOfDayIn(zone) }
+    else -> d.period.days.map { it.atStartOfDayIn(zone) }
 }
 
 private fun slotLabel(at: Instant, level: Level, zone: TimeZone): String {
     val t = at.toLocalDateTime(zone)
-    return if (level == Level.HOUR) "${t.hour} h" else "${t.date.day}/${t.date.month.ordinal + 1}"
+    return when (level) {
+        Level.HOUR -> "${t.hour} h"
+        Level.MONTH -> SHORT_MONTH_NAMES[t.date.month.ordinal]
+        else -> "${t.date.day}/${t.date.month.ordinal + 1}"
+    }
 }
 
 @Composable
@@ -252,7 +269,11 @@ private fun SocLine(rows: List<AggRow>, from: Instant, kind: PeriodKind, zone: T
         color = p.battery,
         unit = "%",
         decimals = 0,
-        labelEveryMinutes = if (kind == PeriodKind.DAY) 180 else 24 * 60,
+        labelEveryMinutes = when (kind) {
+            PeriodKind.DAY -> 180
+            PeriodKind.YEAR -> 30 * 24 * 60
+            else -> 24 * 60
+        },
         xLabel = { minutes ->
             val t = instantAt(from, minutes).toLocalDateTime(zone)
             if (kind == PeriodKind.DAY) "${t.hour} h" else "${t.date.day}/${t.date.month.ordinal + 1}"
