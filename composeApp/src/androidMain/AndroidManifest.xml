@@ -18,6 +18,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".VoltdeckApplication"
@@ -36,5 +37,14 @@
             android:name=".CollectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <!-- BOOT_COMPLETED est une diffusion protégée (le système seul l'émet) et l'action est revérifiée dans le code. Passer à
+             exported="false" réduirait la surface mais n'a pas été vérifié sur appareil : à faire avec le test de redémarrage. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

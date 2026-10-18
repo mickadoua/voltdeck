@@ -19,12 +19,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.voltdeck.core.DeviceId
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.drivers.victron.VictronLinkStatus
+import app.voltdeck.storage.MinuteCoverage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /** Âge lisible d'une mesure : « il y a 12 s », « il y a 3 min ». */
 fun ageText(age: Duration): String = when {
@@ -34,8 +40,41 @@ fun ageText(age: Duration): String = when {
     else -> "il y a ${age.inWholeHours} h"
 }
 
+/** Objectif de couverture des minutes (VOL-8). */
+const val COVERAGE_TARGET = 0.95
+
+/** « 97 % (1397 sur 1440 min) », ou une explication tant qu'aucune minute n'est attendue. */
+fun coverageText(coverage: MinuteCoverage?): String {
+    val ratio = coverage?.ratio ?: return "pas encore de mesure"
+    return "${(ratio * 100).toInt()} % (${coverage.covered} sur ${coverage.expected} min)"
+}
+
+/** Vrai si la couverture est sous l'objectif sur une durée assez longue pour être un vrai trou et pas un démarrage. */
+fun coverageBelowTarget(coverage: MinuteCoverage?): Boolean =
+    coverage != null && coverage.expected >= MIN_MINUTES_JUDGED && (coverage.ratio ?: 1.0) < COVERAGE_TARGET
+
+private const val MIN_MINUTES_JUDGED = 30
+
+/** Ce que Diagnostic dit d'une tentative de reprise au démarrage : de quoi distinguer « refusé par Android » de « jamais tenté ». */
+fun bootAttemptText(attempt: BootAttempt?, now: Instant): String {
+    if (attempt == null) return "aucune depuis l'installation"
+    val what = when (attempt.outcome) {
+        BootOutcome.STARTED -> "service lancé"
+        BootOutcome.SETTING_OFF -> "non tentée : réglage désactivé"
+        BootOutcome.STOPPED_BY_USER -> "non tentée : collecte arrêtée"
+        BootOutcome.NO_DEVICE -> "non tentée : aucun équipement"
+        BootOutcome.NO_PERMISSION -> "non tentée : permission Bluetooth retirée"
+        BootOutcome.REFUSED -> "refusée par Android${attempt.detail?.let { " ($it)" }.orEmpty()}"
+    }
+    return "$what, ${ageText(now - attempt.at)}"
+}
+
+/** Un refus d'Android est le seul cas qui demande une action de l'utilisateur (restriction du constructeur, droit retiré). */
+fun bootAttemptIsProblem(attempt: BootAttempt?) =
+    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.NO_PERMISSION)
+
 @Composable
-fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
+fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection, onBack: () -> Unit) {
     val p = LocalPalette.current
     val session by runtime.session.collectAsState()
     val latest by runtime.latest.collectAsState()
@@ -49,6 +88,14 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
         while (true) {
             now = session.clock.now()
             delay(1.seconds)
+        }
+    }
+    var coverage by remember { mutableStateOf<Map<DeviceId, MinuteCoverage?>>(emptyMap()) }
+    LaunchedEffect(session, database) {
+        while (true) {
+            val at = session.clock.now()
+            coverage = withContext(Dispatchers.Default) { session.devices.associate { it.deviceId to runtime.coverage(it.deviceId, at) } }
+            delay(30.seconds)
         }
     }
     val demo = session is DemoSession
@@ -77,12 +124,31 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
             Line("Trames Victron tronquées", session.truncatedVictronFrames.toString())
         }
 
+        if (background.supported) {
+            val bootAttempt = background.lastBootAttempt
+            val serviceFailure = background.lastServiceFailure
+            val wallNow = Clock.System.now()
+            Card(Modifier.fillMaxWidth()) {
+                Txt("Reprise après redémarrage", 17.sp, FontWeight.Bold)
+                Line("Réglage", if (background.restartAfterBoot) "activé" else "désactivé")
+                Line("Dernière tentative", bootAttemptText(bootAttempt, wallNow))
+                if (bootAttemptIsProblem(bootAttempt)) Pill("La collecte n'a pas repris seule", Tone.WARN)
+                serviceFailure?.let { Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}") }
+            }
+        }
+
         session.devices.forEach { device ->
             val reading = latest[device.deviceId]
             Card(Modifier.fillMaxWidth()) {
                 Txt(session.title(device.deviceId), 17.sp, FontWeight.Bold)
                 Line("Lecture", if (device.role == DeviceRole.BATTERY) "connexion (JBD)" else "écoute des annonces (Victron)")
                 Line("Dernière mesure", reading?.let { ageText(now - it.at) } ?: "aucune")
+                Line(
+                    if (device.role == DeviceRole.BATTERY) "Mesures par minute" else "Annonces par minute",
+                    runtime.readingsPerMinute(device.deviceId, now).toString(),
+                )
+                Line("Couverture des minutes (24 h)", coverageText(coverage[device.deviceId]))
+                if (coverageBelowTarget(coverage[device.deviceId])) Pill("Sous l'objectif de ${(COVERAGE_TARGET * 100).toInt()} %", Tone.WARN)
                 if (device.role == DeviceRole.BATTERY) {
                     val c = counters[device.deviceId]
                     Line("Mesures", (c?.readings ?: 0).toString())
