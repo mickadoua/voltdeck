@@ -8,6 +8,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -72,6 +74,27 @@ class SystemStatsRangeTest {
     fun aRangeGivesWhatEachDayGivesAlone() {
         populate()
         assertSameAsDayByDay()
+    }
+
+    /** Jours 0-2 en minutes seules (hors ordre : rattrapage, import), jours 3-19 en heures stockées. */
+    private fun populateMinutesBeforeStoredHours() {
+        db.addDevice(MPPT, DeviceRole.SOLAR_CHARGER)
+        db.addDevice(BMS, DeviceRole.BATTERY)
+        dates.forEachIndexed { index, day -> feedDay(day, 0..23, 1.0, bucket = if (index < 3) Level.MINUTE else Level.HOUR) }
+    }
+
+    @Test
+    fun theEquivalenceHoldsForMinutesAfterStoredHoursButNotBeforeThem() {
+        populateMinutesBeforeStoredHours()
+        val day = dates.first()
+        val alone = stats.solarProduction(listOf(day), zone).getValue(day)
+        val inRange = stats.solarProduction(dates, zone).getValue(day)
+        assertNotNull(alone.value, "jour par jour, les minutes d'un jour sans heure stockée sont lues")
+        assertEquals(Nature.CALCULATED, alone.nature)
+        // Limite connue : `AggregateReader.hourly` ne dérive les minutes qu'après la dernière heure stockée de la plage entière.
+        // Le Rollup avance sur le dernier cran global : des minutes plus anciennes que des heures stockées n'arrivent qu'avec un
+        // import ou un rattrapage hors ordre. Ce test échoue si la limite disparaît : retirer alors la réserve du KDoc de SystemStats.
+        assertNull(inRange.value, "la lecture par plage ne voit pas ces minutes")
     }
 
     @Test

@@ -35,7 +35,9 @@ class SystemStats(
 
     /**
      * [solarProduction] de plusieurs jours à la fois, avec une lecture par MPPT et par mesure pour toute la plage plutôt qu'une par jour :
-     * la vue Année en demande plusieurs centaines. Même résultat que jour par jour.
+     * la vue Année en demande plusieurs centaines. Même résultat que jour par jour, **sauf** pour des minutes plus anciennes que des heures
+     * stockées de la même plage ([AggregateReader.hourly] ne dérive les minutes qu'après la dernière heure stockée de la plage) : cas hors
+     * ordre (import, rattrapage), le Rollup consolidant dans l'ordre.
      */
     fun solarProduction(days: List<LocalDate>, zone: TimeZone): Map<LocalDate, Stat> {
         if (days.isEmpty()) return emptyMap()
@@ -94,7 +96,7 @@ class SystemStats(
     /**
      * [consumption] de plusieurs jours à la fois : les heures de chaque série sont lues une fois pour toute la plage, plutôt qu'une
      * fois par jour (la vue Année en demande plusieurs centaines) ; les minutes des jours récents restent lues jour par jour.
-     * Même résultat que jour par jour, ce que vérifie un test.
+     * Même résultat que jour par jour, ce que vérifie un test, avec la même réserve que [solarProduction] pour des minutes hors ordre.
      */
     fun consumption(days: List<LocalDate>, zone: TimeZone, now: Instant): Map<LocalDate, Stat> {
         if (days.isEmpty()) return emptyMap()
@@ -189,6 +191,9 @@ class SystemStats(
      * Nombre de cycles. Compteur du BMS tel quel s'il en existe un ([Nature.DEVICE_COMPUTED] ; plusieurs batteries : le plus élevé),
      * sinon cycles équivalents du flux batterie = Ah déchargés depuis l'enregistrement du shunt ÷ [nominalCapacityAh]
      * ([Nature.ESTIMATED]). Sans capacité nominale saisie, l'estimation est absente.
+     *
+     * L'estimation est un **minimum** : `CHARGE_OUT_AH` n'intègre que les périodes où l'app a reçu des mesures, donc les trous
+     * d'enregistrement (app fermée, appareil hors de portée) font sous-compter les Ah déchargés, sans que la couverture soit connue.
      */
     fun cycles(nominalCapacityAh: Double?, now: Instant, zone: TimeZone): Stat {
         val counters = devices.all().filter { it.role == DeviceRole.BATTERY && it.archivedAt == null }
