@@ -44,4 +44,16 @@ class OneLineFitTest {
         assertTrue(fit.abbreviated)
         assertTrue(14f * fit.shrink >= MIN_ONE_LINE_SP)
     }
+
+    @Test
+    fun overflowIsMeasuredAgainstTheAvailableWidth() {
+        assertFalse(oneLineOverflows(intrinsicWidth = 80f, availableWidth = 120))
+        assertTrue(oneLineOverflows(intrinsicWidth = 130f, availableWidth = 120))
+        assertTrue(oneLineOverflows(intrinsicWidth = 119f, availableWidth = 120))
+    }
+
+    @Test
+    fun anUnboundedSlotNeverOverflows() {
+        assertFalse(oneLineOverflows(intrinsicWidth = 5000f, availableWidth = Int.MAX_VALUE))
+    }
 }

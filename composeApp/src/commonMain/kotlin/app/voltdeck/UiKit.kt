@@ -45,6 +45,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -81,7 +82,7 @@ fun Txt(
                     fit = OneLineFit()
                 } else {
                     widest[0] = maxOf(widest[0], available)
-                    val overflow = it.didOverflowWidth || it.multiParagraph.maxIntrinsicWidth > it.multiParagraph.width * ONE_LINE_MARGIN
+                    val overflow = it.didOverflowWidth || oneLineOverflows(it.multiParagraph.maxIntrinsicWidth, available)
                     fit = nextOneLineFit(fit, overflow, size.value, shortText != null)
                 }
             },
@@ -104,6 +105,13 @@ fun nextOneLineFit(fit: OneLineFit, overflow: Boolean, sizeSp: Float, hasShort: 
     if (hasShort && !fit.abbreviated) return OneLineFit(shrink = 1f, abbreviated = true)
     return fit
 }
+
+/**
+ * Sans retour à la ligne, la mise en page du paragraphe prend sa propre largeur intrinsèque : c'est donc la largeur
+ * *disponible* (contrainte du parent) qu'il faut comparer, jamais celle du paragraphe. Une contrainte infinie ne déborde pas.
+ */
+fun oneLineOverflows(intrinsicWidth: Float, availableWidth: Int): Boolean =
+    availableWidth != Constraints.Infinity && intrinsicWidth > availableWidth * ONE_LINE_MARGIN
 
 private const val ONE_LINE_STEP = 0.92f
 
