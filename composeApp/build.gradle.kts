@@ -29,6 +29,7 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
+            implementation(libs.vico.compose)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -39,6 +40,9 @@ kotlin {
         }
         getByName("androidUnitTest").dependencies {
             implementation(libs.sqldelight.sqlite.driver)
+            implementation(libs.robolectric)
+            implementation(libs.compose.ui.test.junit4)
+            implementation(libs.junit)
         }
     }
 }
@@ -70,6 +74,7 @@ android {
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
