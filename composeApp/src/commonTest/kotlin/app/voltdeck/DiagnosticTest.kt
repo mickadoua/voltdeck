@@ -47,4 +47,23 @@ class DiagnosticTest {
         assertFalse(coverageBelowTarget(MinuteCoverage(1, 5)), "5 minutes de démarrage ne sont pas un trou")
         assertFalse(coverageBelowTarget(null))
     }
+
+    @Test
+    fun aBootAttemptTellsRefusedByAndroidApartFromNeverTried() {
+        val at = t0 - 5.minutes
+        assertEquals("aucune depuis l'installation", bootAttemptText(null, t0))
+        assertEquals("service lancé, il y a 5 min", bootAttemptText(BootAttempt(at, BootOutcome.STARTED), t0))
+        assertEquals("non tentée : réglage désactivé, il y a 5 min", bootAttemptText(BootAttempt(at, BootOutcome.SETTING_OFF), t0))
+        assertEquals(
+            "refusée par Android (IllegalStateException), il y a 5 min",
+            bootAttemptText(BootAttempt(at, BootOutcome.REFUSED, "IllegalStateException"), t0),
+        )
+    }
+
+    @Test
+    fun onlyAnAndroidRefusalOrARevokedPermissionIsFlaggedAsAProblem() {
+        val flagged = BootOutcome.entries.filter { bootAttemptIsProblem(BootAttempt(t0, it)) }
+        assertEquals(listOf(BootOutcome.NO_PERMISSION, BootOutcome.REFUSED), flagged)
+        assertFalse(bootAttemptIsProblem(null))
+    }
 }

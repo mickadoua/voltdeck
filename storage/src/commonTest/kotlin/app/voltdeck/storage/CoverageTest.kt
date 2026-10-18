@@ -58,6 +58,13 @@ class CoverageTest {
     }
 
     @Test
+    fun notBeforeRaisesTheStartOfTheWindow() {
+        record(*(120..179).toList().toIntArray())
+        val now = t0 + 3.hours + 90.seconds
+        assertEquals(MinuteCoverage(covered = 60, expected = 60), reader.minutes(BMS, now, notBefore = t0 + 2.hours))
+    }
+
+    @Test
     fun cellsAndProbesAloneAreNotAMeasure() {
         record(0, 1, metric = Metric.SOC)
         db.minuteQueries.upsertMinute(BMS.value, Metric.CELL_VOLTAGE.name, 3, (t0 + 2.minutes).epochSeconds, 1, 3.3, 3.3, 3.3, 3.3)

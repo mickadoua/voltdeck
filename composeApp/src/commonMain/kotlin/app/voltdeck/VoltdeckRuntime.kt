@@ -67,6 +67,7 @@ class VoltdeckRuntime(
     private val latestState = MutableStateFlow<Map<DeviceId, Reading>>(emptyMap())
     private val databaseState = MutableStateFlow<VoltdeckDatabase?>(null)
     private val recorder = MutableStateFlow(RecorderState())
+    private val coverageFloor = MutableStateFlow<Instant?>(null)
     private val receivedState = MutableStateFlow<Map<DeviceId, List<Instant>>>(emptyMap())
 
     val demo: StateFlow<Boolean> get() = demoState
@@ -125,7 +126,8 @@ class VoltdeckRuntime(
     fun readingsPerMinute(id: DeviceId, now: Instant): Int = ReadingRate.perMinute(receivedState.value[id].orEmpty(), now)
 
     /** Part des 24 dernières heures où [id] a au moins une mesure par minute, `null` sans base. */
-    fun coverage(id: DeviceId, now: Instant): MinuteCoverage? = databaseState.value?.let { CoverageReader(it).minutes(id, now) }
+    fun coverage(id: DeviceId, now: Instant): MinuteCoverage? =
+        databaseState.value?.let { CoverageReader(it).minutes(id, now, notBefore = coverageFloor.value) }
 
     fun stats(): SystemStats? = databaseState.value?.let { SystemStats(it, ::measuresBattery) }
 
@@ -142,6 +144,8 @@ class VoltdeckRuntime(
         }
         databaseState.value = db
         val now = session.clock.now()
+        // La démo enregistre ses équipements au début d'un historique simulé par heures : sans minutes brutes avant cet instant.
+        coverageFloor.value = if (demo) now else null
         val since = if (demo) demoHistoryStart(now, zone, demoHistoryDays) else now - 1.minutes
         val aggregator = db?.let { register(it, session, since); MinuteAggregator(it) }
         if (db != null && demo) {
@@ -208,7 +212,8 @@ class VoltdeckRuntime(
         }
     }
 
-    private companion object {
-        val FLUSH_PERIOD = 30.seconds
+    companion object {
+        /** Doit rester inférieur à `CoverageReader.DEFAULT_FLUSH_DELAY` moins une minute, sinon la couverture affiche de faux trous. */
+        internal val FLUSH_PERIOD = 30.seconds
     }
 }

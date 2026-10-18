@@ -37,7 +37,8 @@
             android:name=".CollectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
-        <!-- Exporté pour que le système l'appelle ; l'action BOOT_COMPLETED est revérifiée dans le code. -->
+        <!-- BOOT_COMPLETED est une diffusion protégée (le système seul l'émet) et l'action est revérifiée dans le code. Passer à
+             exported="false" réduirait la surface mais n'a pas été vérifié sur appareil : à faire avec le test de redémarrage. -->
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

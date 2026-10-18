@@ -26,9 +26,11 @@ import app.voltdeck.storage.MinuteCoverage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /** Âge lisible d'une mesure : « il y a 12 s », « il y a 3 min ». */
 fun ageText(age: Duration): String = when {
@@ -53,8 +55,26 @@ fun coverageBelowTarget(coverage: MinuteCoverage?): Boolean =
 
 private const val MIN_MINUTES_JUDGED = 30
 
+/** Ce que Diagnostic dit d'une tentative de reprise au démarrage : de quoi distinguer « refusé par Android » de « jamais tenté ». */
+fun bootAttemptText(attempt: BootAttempt?, now: Instant): String {
+    if (attempt == null) return "aucune depuis l'installation"
+    val what = when (attempt.outcome) {
+        BootOutcome.STARTED -> "service lancé"
+        BootOutcome.SETTING_OFF -> "non tentée : réglage désactivé"
+        BootOutcome.STOPPED_BY_USER -> "non tentée : collecte arrêtée"
+        BootOutcome.NO_DEVICE -> "non tentée : aucun équipement"
+        BootOutcome.NO_PERMISSION -> "non tentée : permission Bluetooth retirée"
+        BootOutcome.REFUSED -> "refusée par Android${attempt.detail?.let { " ($it)" }.orEmpty()}"
+    }
+    return "$what, ${ageText(now - attempt.at)}"
+}
+
+/** Un refus d'Android est le seul cas qui demande une action de l'utilisateur (restriction du constructeur, droit retiré). */
+fun bootAttemptIsProblem(attempt: BootAttempt?) =
+    attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.NO_PERMISSION)
+
 @Composable
-fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
+fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection, onBack: () -> Unit) {
     val p = LocalPalette.current
     val session by runtime.session.collectAsState()
     val latest by runtime.latest.collectAsState()
@@ -102,6 +122,19 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
             Txt("Bluetooth", 17.sp, FontWeight.Bold)
             if (scanError == null) Pill(if (demo) "Simulé" else "Scan actif", Tone.GOOD) else Pill(scanError!!, Tone.WARN)
             Line("Trames Victron tronquées", session.truncatedVictronFrames.toString())
+        }
+
+        if (background.supported) {
+            val bootAttempt = background.lastBootAttempt
+            val serviceFailure = background.lastServiceFailure
+            val wallNow = Clock.System.now()
+            Card(Modifier.fillMaxWidth()) {
+                Txt("Reprise après redémarrage", 17.sp, FontWeight.Bold)
+                Line("Réglage", if (background.restartAfterBoot) "activé" else "désactivé")
+                Line("Dernière tentative", bootAttemptText(bootAttempt, wallNow))
+                if (bootAttemptIsProblem(bootAttempt)) Pill("La collecte n'a pas repris seule", Tone.WARN)
+                serviceFailure?.let { Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}") }
+            }
         }
 
         session.devices.forEach { device ->

@@ -124,7 +124,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                         screen = Screen.Overview
                     },
                 )
-                Screen.Diagnostic -> DiagnosticScreen(runtime) { screen = Screen.Devices }
+                Screen.Diagnostic -> DiagnosticScreen(runtime, background) { screen = Screen.Devices }
                 Screen.AddDevice -> if (live != null) {
                     AddDeviceScreen(live, bluetooth, onBack = { screen = Screen.Devices }, onAdded = {
                         runtime.setDemo(false)

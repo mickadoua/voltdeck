@@ -8,6 +8,7 @@ import app.voltdeck.storage.AggregateReader
 import app.voltdeck.storage.Level
 import app.voltdeck.storage.Nature
 import app.voltdeck.storage.SeriesKey
+import app.voltdeck.storage.CoverageReader
 import app.voltdeck.storage.db.VoltdeckDatabase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -42,6 +43,11 @@ class VoltdeckRuntimeTest {
         InMemoryVictronKeyStore(), InMemoryShuntSetupStore(), InMemoryDeviceRegistry(), null, databases, backgroundScope,
         zone, object : Clock { override fun now() = start + testScheduler.currentTime.milliseconds }, historyContext = EmptyCoroutineContext,
     )
+
+    @Test
+    fun theCoverageMarginCoversTheFlushPeriodPlusAClosedMinute() {
+        assertTrue(CoverageReader.DEFAULT_FLUSH_DELAY >= VoltdeckRuntime.FLUSH_PERIOD + 1.minutes)
+    }
 
     @Test
     fun theDemoIsRecordedAndReadBackByTheStatistics() = runTest {
