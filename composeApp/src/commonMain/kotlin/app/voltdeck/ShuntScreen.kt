@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.voltdeck.drivers.victron.VictronLinkStatus
@@ -79,6 +81,7 @@ fun ShuntScreen(
     var placement by remember { mutableStateOf(initial.placement) }
     var circuit by remember { mutableStateOf(initial.circuit) }
     var name by remember { mutableStateOf(initial.name.orEmpty()) }
+    var capacity by remember { mutableStateOf(initial.capacityAh?.let { frDecimal(it, if (it % 1.0 == 0.0) 0 else 1) }.orEmpty()) }
 
     fun choose(newPlacement: ShuntPlacement) {
         placement = newPlacement
@@ -89,7 +92,9 @@ fun ShuntScreen(
         }
     }
 
-    val draft = ShuntSetup(placement, circuit, name.takeIf { it.isNotBlank() && circuit != null })
+    val capacityAh = capacityOf(capacity).takeIf { placement == ShuntPlacement.BATTERY }
+    val capacityInvalid = placement == ShuntPlacement.BATTERY && capacity.isNotBlank() && capacityAh == null
+    val draft = ShuntSetup(placement, circuit, name.takeIf { it.isNotBlank() && circuit != null }, capacityAh)
 
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -156,12 +161,38 @@ fun ShuntScreen(
             )
         }
 
+        if (placement == ShuntPlacement.BATTERY) {
+            Txt("Capacité de la batterie (facultatif)", 17.sp, FontWeight.Bold)
+            BasicTextField(
+                value = capacity,
+                onValueChange = { capacity = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(CAPACITY_LIMIT) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                cursorBrush = SolidColor(p.ink),
+                textStyle = TextStyle(color = p.ink, fontSize = 16.sp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .sizeIn(minHeight = 52.dp)
+                    .border(1.5.dp, if (capacityInvalid) p.critText else p.ink2, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 15.dp),
+                decorationBox = { inner ->
+                    if (capacity.isEmpty()) Txt("Ah, par exemple 200", 16.sp, color = p.muted)
+                    inner()
+                },
+            )
+            Txt(
+                if (capacityInvalid) "Capacité entre 1 et ${ShuntSetup.MAX_CAPACITY_AH.toInt()} Ah."
+                else "Sans BMS, les cycles sont estimés : Ah déchargés ÷ cette capacité. Sans capacité, ils restent masqués.",
+                13.sp, color = if (capacityInvalid) p.critText else p.ink2,
+            )
+        }
+
         Card(Modifier.fillMaxWidth()) {
             Txt("Sur la vue d'ensemble", 13.sp, FontWeight.SemiBold, p.muted)
             Txt(placementEffect(draft), 14.sp, color = p.ink2)
         }
 
-        PrimaryButton("Enregistrer", Modifier.fillMaxWidth()) { onSave(draft) }
+        PrimaryButton("Enregistrer", Modifier.fillMaxWidth()) { if (!capacityInvalid) onSave(draft) }
     }
 }
 
@@ -210,3 +241,7 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 private const val NAME_LIMIT = 30
+private const val CAPACITY_LIMIT = 7
+
+/** Capacité saisie en Ah (virgule ou point), `null` si vide ou hors limites. */
+internal fun capacityOf(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()?.takeIf(ShuntSetup::isValidCapacity)

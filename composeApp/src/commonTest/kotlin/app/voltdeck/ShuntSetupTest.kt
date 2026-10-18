@@ -59,4 +59,41 @@ class ShuntSetupTest {
         assertEquals(ShuntPlacement.SOURCE, detectedSetup(meter(-3.0))!!.placement)
         assertNull(detectedSetup(null))
     }
+
+    @Test
+    fun theCapacitySurvivesEncodingAndOldTextStillReads() {
+        val withCapacity = ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 200.0)
+        assertEquals(withCapacity, ShuntSetup.decode(withCapacity.encode()))
+        assertEquals(ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 105.5), ShuntSetup.decode(ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 105.5).encode()))
+        assertEquals("BATTERY", ShuntSetup.DEFAULT.encode())
+        assertEquals(ShuntSetup.DEFAULT, ShuntSetup.decode("BATTERY"))
+        assertEquals(ShuntSetup(ShuntPlacement.SOURCE, Circuit.SOLAR, "Toit"), ShuntSetup.decode("SOURCE\u001FSOLAR\u001FToit"))
+        assertNull(ShuntSetup.DEFAULT.capacityAh)
+    }
+
+    @Test
+    fun aCapacityIsOnlyForTheBatteryAndWithinLimits() {
+        assertFailsWith<IllegalArgumentException> { ShuntSetup(ShuntPlacement.LOAD, Circuit.FRIDGE, capacityAh = 100.0) }
+        assertFailsWith<IllegalArgumentException> { ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 0.0) }
+        assertFailsWith<IllegalArgumentException> { ShuntSetup(ShuntPlacement.BATTERY, capacityAh = -5.0) }
+        assertFailsWith<IllegalArgumentException> { ShuntSetup(ShuntPlacement.BATTERY, capacityAh = Double.NaN) }
+        assertFailsWith<IllegalArgumentException> { ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 1e9) }
+    }
+
+    @Test
+    fun anUnreadableStoredCapacityIsDroppedNotTheWholeSetup() {
+        assertEquals(ShuntSetup.DEFAULT, ShuntSetup.decode("BATTERY\u001F\u001F\u001Fabc"))
+        assertEquals(ShuntSetup.DEFAULT, ShuntSetup.decode("BATTERY\u001F\u001F\u001F-3.0"))
+        assertEquals(ShuntSetup.DEFAULT, ShuntSetup.decode("BATTERY\u001F\u001F\u001FNaN"))
+    }
+
+    @Test
+    fun theCapacityTypedByTheUserAcceptsACommaAndRejectsNonsense() {
+        assertEquals(200.0, capacityOf("200"))
+        assertEquals(105.5, capacityOf(" 105,5 "))
+        assertNull(capacityOf(""))
+        assertNull(capacityOf("0"))
+        assertNull(capacityOf("1.2.3"))
+        assertNull(capacityOf("99999"))
+    }
 }

@@ -9,6 +9,7 @@ import app.voltdeck.storage.EnergyHistory
 import app.voltdeck.storage.Level
 import app.voltdeck.storage.Nature
 import app.voltdeck.storage.SeriesKey
+import app.voltdeck.storage.Stat
 import app.voltdeck.storage.SystemStats
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -21,7 +22,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
 
-enum class PeriodKind(val label: String) { DAY("Jour"), WEEK("Semaine"), MONTH("Mois") }
+enum class PeriodKind(val label: String) { DAY("Jour"), WEEK("Semaine"), MONTH("Mois"), YEAR("Année") }
 
 data class StatsPeriod(val kind: PeriodKind, val anchor: LocalDate) {
     val first: LocalDate
@@ -29,6 +30,7 @@ data class StatsPeriod(val kind: PeriodKind, val anchor: LocalDate) {
             PeriodKind.DAY -> anchor
             PeriodKind.WEEK -> anchor.minus(anchor.dayOfWeek.isoDayNumber - 1, DateTimeUnit.DAY)
             PeriodKind.MONTH -> LocalDate(anchor.year, anchor.month, 1)
+            PeriodKind.YEAR -> LocalDate(anchor.year, 1, 1)
         }
 
     val endExclusive: LocalDate
@@ -36,6 +38,7 @@ data class StatsPeriod(val kind: PeriodKind, val anchor: LocalDate) {
             PeriodKind.DAY -> first.plus(1, DateTimeUnit.DAY)
             PeriodKind.WEEK -> first.plus(7, DateTimeUnit.DAY)
             PeriodKind.MONTH -> first.plus(1, DateTimeUnit.MONTH)
+            PeriodKind.YEAR -> first.plus(1, DateTimeUnit.YEAR)
         }
 
     val days: List<LocalDate>
@@ -51,6 +54,7 @@ data class StatsPeriod(val kind: PeriodKind, val anchor: LocalDate) {
         PeriodKind.DAY -> first.plus(sign, DateTimeUnit.DAY)
         PeriodKind.WEEK -> first.plus(7 * sign, DateTimeUnit.DAY)
         PeriodKind.MONTH -> first.plus(sign, DateTimeUnit.MONTH)
+        PeriodKind.YEAR -> first.plus(sign, DateTimeUnit.YEAR)
     }
 
     val label: String
@@ -61,18 +65,20 @@ data class StatsPeriod(val kind: PeriodKind, val anchor: LocalDate) {
                 if (first.month == last.month) {
                     "${first.day} → ${last.day} ${MONTHS[last.month.number - 1]}"
                 } else {
-                    "${first.day} ${SHORT_MONTHS[first.month.number - 1]} → ${last.day} ${SHORT_MONTHS[last.month.number - 1]}"
+                    "${first.day} ${SHORT_MONTH_NAMES[first.month.number - 1]} → ${last.day} ${SHORT_MONTH_NAMES[last.month.number - 1]}"
                 }
             }
             PeriodKind.MONTH -> "${MONTHS[first.month.number - 1]} ${first.year}"
+            PeriodKind.YEAR -> "${first.year}"
         }
 
     companion object {
         private val DAYS = listOf("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
         private val MONTHS = listOf("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")
-        private val SHORT_MONTHS = listOf("janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.")
     }
 }
+
+val SHORT_MONTH_NAMES = listOf("janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.")
 
 /** Total d'énergie d'une période, en kWh, avec sa nature (« calculée » dès qu'une journée l'est). */
 data class EnergyTotal(val kwh: Double, val calculated: Boolean, val coverage: Double?)
@@ -129,6 +135,9 @@ fun comparableDays(period: StatsPeriod, today: LocalDate): Pair<List<LocalDate>,
 /** Un jour ne compte dans une comparaison que s'il a au moins ce nombre d'heures mesurées : une demi-journée fausserait le total. */
 const val MIN_MEASURED_HOURS = 20
 
+/** Les données chargées pour une autre période que [period] ne s'affichent pas sous son titre : « Chargement… » à la place. */
+fun StatsData?.shownFor(period: StatsPeriod): StatsData? = this?.takeIf { it.period == period }
+
 /** Part minimale des périodes observées que [SystemStats.consumption] doit avoir pu calculer (il écarte celles où un DC-DC débite). */
 const val MIN_CONSUMPTION_COVERAGE = 0.9
 
@@ -159,6 +168,10 @@ fun compareEnergy(current: List<Double?>, previous: List<Double?>, wholePeriods:
     return Comparison(percent, pairs.size, basis)
 }
 
+/**
+ * Données de l'écran Statistiques pour [period]. Sans [comparisons], les comparaisons à la période précédente (de loin la partie la
+ * plus coûteuse sur un an) restent absentes : l'écran affiche d'abord le graphique et les totaux, puis les complète.
+ */
 fun loadStats(
     stats: SystemStats,
     history: EnergyHistory,
@@ -167,20 +180,33 @@ fun loadStats(
     period: StatsPeriod,
     zone: TimeZone,
     now: Instant,
+    comparisons: Boolean = true,
 ): StatsData {
     val today = now.toLocalDateTime(zone).date
     val from = period.first.atStartOfDayIn(zone)
     val to = minOf(period.endExclusive.atStartOfDayIn(zone), now)
-    val level = if (period.kind == PeriodKind.DAY) Level.HOUR else Level.DAY
+    val level = when (period.kind) {
+        PeriodKind.DAY -> Level.HOUR
+        PeriodKind.WEEK, PeriodKind.MONTH -> Level.DAY
+        PeriodKind.YEAR -> Level.MONTH
+    }
+
+    val (currentDays, previousDays) = comparableDays(period, today)
+    // Deux plages (période en cours, période précédente) : lire d'un coup tout ce qui les sépare coûterait des mois d'heures inutiles.
+    val ranges = listOf((period.days + currentDays).filter { it <= today }.distinct(), previousDays.filter { it <= today }.takeIf { comparisons }.orEmpty())
+    val solarByDay = ranges.fold(emptyMap<LocalDate, Stat>()) { all, days -> all + stats.solarProduction(days, zone) }
+    val consumptionByDay = ranges.fold(emptyMap<LocalDate, Stat>()) { all, days -> all + stats.consumption(days, zone, now) }
+    fun solar(date: LocalDate) = solarByDay.getValue(date)
+    fun consumption(date: LocalDate) = consumptionByDay.getValue(date)
 
     fun produced(dates: List<LocalDate>): EnergyTotal? {
-        val days = dates.filter { it <= today }.map { stats.solarProduction(it, zone) }.filter { it.value != null }
+        val days = dates.filter { it <= today }.map(::solar).filter { it.value != null }
         if (days.isEmpty()) return null
         return EnergyTotal(days.sumOf { it.value!! }, days.any { it.nature == Nature.CALCULATED }, null)
     }
 
     fun consumed(dates: List<LocalDate>): EnergyTotal? {
-        val days = dates.filter { it <= today }.map { stats.consumption(it, zone, now) }.filter { it.value != null }
+        val days = dates.filter { it <= today }.map(::consumption).filter { it.value != null }
         if (days.isEmpty()) return null
         return EnergyTotal(days.sumOf { it.value!! } / 1000.0, true, days.mapNotNull { it.coverage }.average().takeIf { !it.isNaN() })
     }
@@ -190,21 +216,20 @@ fun loadStats(
     fun min(rows: List<AggRow>) = rows.minByOrNull { it.stats.min }?.let { Extremum(it.stats.min, it.start) }
     fun max(rows: List<AggRow>) = rows.maxByOrNull { it.stats.max }?.let { Extremum(it.stats.max, it.start) }
 
-    val (currentDays, previousDays) = comparableDays(period, today)
     val wholePeriods = isWholeComparison(period, currentDays, previousDays)
     fun hoursOf(dates: List<LocalDate>) = if (dates.isEmpty()) emptyList() else
         history.buckets(Level.HOUR, dates.first().atStartOfDayIn(zone), dates.last().plus(1, DateTimeUnit.DAY).atStartOfDayIn(zone), zone)
-    val currentHours = hoursOf(currentDays)
-    val previousHours = hoursOf(previousDays)
+    val currentHours = if (comparisons) hoursOf(currentDays) else emptyList()
+    val previousHours = if (comparisons) hoursOf(previousDays) else emptyList()
     fun producedKwh(dates: List<LocalDate>, hours: List<EnergyBucket>): List<Double?> {
         val complete = wellMeasuredDays(hours, zone) { it.producedWh != null }
-        return dates.map { if (it in complete) stats.solarProduction(it, zone).value else null }
+        return dates.map { if (it in complete) solar(it).value else null }
     }
     fun consumedKwh(dates: List<LocalDate>, hours: List<EnergyBucket>): List<Double?> {
         val complete = wellMeasuredDays(hours, zone) { it.producedWh != null && it.batteryNetWh != null }
         return dates.map { date ->
             if (date !in complete) return@map null
-            val day = stats.consumption(date, zone, now)
+            val day = consumption(date)
             if ((day.coverage ?: 0.0) < MIN_CONSUMPTION_COVERAGE) null else day.value?.div(1000.0)
         }
     }
@@ -215,8 +240,8 @@ fun loadStats(
         buckets = if (to > from) history.buckets(level, from, to, zone) else emptyList(),
         produced = produced(period.days),
         consumed = consumed(period.days),
-        producedComparison = compareEnergy(producedKwh(currentDays, currentHours), producedKwh(previousDays, previousHours), wholePeriods),
-        consumedComparison = compareEnergy(consumedKwh(currentDays, currentHours), consumedKwh(previousDays, previousHours), wholePeriods),
+        producedComparison = if (comparisons) compareEnergy(producedKwh(currentDays, currentHours), producedKwh(previousDays, previousHours), wholePeriods) else null,
+        consumedComparison = if (comparisons) compareEnergy(consumedKwh(currentDays, currentHours), consumedKwh(previousDays, previousHours), wholePeriods) else null,
         soc = soc,
         socMin = min(soc),
         socMax = max(soc),

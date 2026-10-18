@@ -96,13 +96,19 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
     val devices = remember(session, changes) { session.devices }
     val setupOf = { id: DeviceId -> runtime.setupOf(id) }
     var estimatedAutonomy by remember { mutableStateOf<Double?>(null) }
+    var estimatedCycles by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(session, changes) {
         while (true) {
-            estimatedAutonomy = runtime.stats()?.autonomy(session.clock.now())?.takeIf { it.nature == Nature.ESTIMATED }?.value
+            val stats = runtime.stats()
+            val now = session.clock.now()
+            estimatedAutonomy = stats?.autonomy(now)?.takeIf { it.nature == Nature.ESTIMATED }?.value
+            estimatedCycles = stats?.cycles(nominalCapacityAh(devices, setupOf), now, runtime.zone)?.takeIf { it.nature == Nature.ESTIMATED }?.value
             delay(1.minutes)
         }
     }
-    val overview = remember(latest, devices, changes, estimatedAutonomy) { buildOverview(devices, latest, setupOf, estimatedAutonomy) }
+    val overview = remember(latest, devices, changes, estimatedAutonomy, estimatedCycles) {
+        buildOverview(devices, latest, setupOf, estimatedAutonomy, estimatedCycles)
+    }
     var backgroundEnabled by remember { mutableStateOf(background.enabled) }
     var restartAfterBoot by remember { mutableStateOf(background.restartAfterBoot) }
     val collectInBackground = session !is DemoSession && devices.isNotEmpty()
