@@ -84,4 +84,28 @@ class LoadStatsTest {
         for (d in 1..3) collect(LocalDate(2026, 10, d), hours = 24, watts = 100.0, mpptHours = 8, mpptStartHour = 8)
         assertNull(load().consumedComparison, "8 h de sources face à 24 h ne se comparent pas")
     }
+
+    @Test
+    fun consumptionIsNotComparedWhenAConverterWasDeliveringForPartOfTheDay() {
+        val dcdc = DeviceId("dcdc-1")
+        DeviceStore(db).register(dcdc, "test", DeviceRole.DCDC, "orion", "a-dcdc", null, Instant.parse("2020-01-01T00:00:00Z"))
+
+        fun converterStates(day: LocalDate, chargingFrom: Int?, chargingHours: Int) {
+            val aggregator = MinuteAggregator(db)
+            var t = day.atStartOfDayIn(zone)
+            val end = t + 24.hours
+            while (t < end) {
+                val charging = chargingFrom != null && t >= day.atStartOfDayIn(zone) + chargingFrom.hours && t < day.atStartOfDayIn(zone) + (chargingFrom + chargingHours).hours
+                aggregator.add(Reading(dcdc, t, listOf(Sample(Metric.DEVICE_STATE, 0, if (charging) 3.0 else 0.0))))
+                t += 60.seconds
+            }
+            aggregator.flushAll()
+        }
+        // même consommation réelle chaque jour ; en octobre le DC-DC débite 10 h par jour, donc seules 14 h sont calculables
+        for (d in 1..3) { collect(LocalDate(2026, 9, d), hours = 24); converterStates(LocalDate(2026, 9, d), null, 0) }
+        for (d in 1..3) { collect(LocalDate(2026, 10, d), hours = 24); converterStates(LocalDate(2026, 10, d), 6, 10) }
+        val data = load()
+        assertNotNull(data.producedComparison, "la collecte est complète des deux côtés")
+        assertNull(data.consumedComparison, "14 h calculables sur 24 face à une journée entière ne se comparent pas")
+    }
 }
