@@ -1,0 +1,75 @@
+package app.voltdeck
+
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import app.voltdeck.core.DeviceId
+import app.voltdeck.core.DeviceRole
+import app.voltdeck.core.Metric
+import app.voltdeck.core.Reading
+import app.voltdeck.core.Sample
+import app.voltdeck.storage.AggregateReader
+import app.voltdeck.storage.DeviceStore
+import app.voltdeck.storage.EnergyHistory
+import app.voltdeck.storage.MinuteAggregator
+import app.voltdeck.storage.SystemStats
+import app.voltdeck.storage.db.VoltdeckDatabase
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+
+class LoadStatsTest {
+    private val zone = TimeZone.UTC
+    private val mppt = DeviceId("mppt-1")
+    private val bms = DeviceId("bms-1")
+    private val db: VoltdeckDatabase = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY + "?foreign_keys=true").let {
+        VoltdeckDatabase.Schema.create(it)
+        VoltdeckDatabase(it)
+    }
+    private val october = StatsPeriod(PeriodKind.MONTH, LocalDate(2026, 10, 10))
+    private val now = Instant.parse("2026-10-06T12:00:00Z")
+
+    init {
+        DeviceStore(db).register(mppt, "test", DeviceRole.SOLAR_CHARGER, "mppt", "a-mppt", null, Instant.parse("2020-01-01T00:00:00Z"))
+        DeviceStore(db).register(bms, "test", DeviceRole.BATTERY, "bms", "a-bms", null, Instant.parse("2020-01-01T00:00:00Z"))
+    }
+
+    private fun collect(day: LocalDate, hours: Int, startHour: Int = 0, watts: Double = 100.0) {
+        val aggregator = MinuteAggregator(db)
+        var t = day.atStartOfDayIn(zone) + startHour.hours
+        val end = t + hours.hours
+        while (t < end) {
+            aggregator.add(Reading(mppt, t, listOf(Sample(Metric.PV_POWER, 0, watts), Sample(Metric.BATTERY_VOLTAGE, 0, 13.0), Sample(Metric.BATTERY_CURRENT, 0, watts / 13.0))))
+            aggregator.add(Reading(bms, t, listOf(Sample(Metric.BATTERY_VOLTAGE, 0, 13.0), Sample(Metric.BATTERY_CURRENT, 0, 2.0))))
+            t += 60.seconds
+        }
+        aggregator.flushAll()
+    }
+
+    private fun load() = loadStats(SystemStats(db), EnergyHistory(db), AggregateReader(db), bms, october, zone, now)
+
+    @Test
+    fun aPartiallyCollectedDayIsNotPairedWithAFullOne() {
+        // septembre : 1er jour collecté 2 h seulement ; octobre : journées entières
+        collect(LocalDate(2026, 9, 1), hours = 2, startHour = 22)
+        for (d in 1..5) collect(LocalDate(2026, 10, d), hours = 24)
+        assertNull(load().producedComparison, "2 h de septembre face à 24 h d'octobre ne se comparent pas")
+        assertNull(load().consumedComparison)
+    }
+
+    @Test
+    fun wellMeasuredDaysOfBothSidesAreCompared() {
+        for (d in 1..3) collect(LocalDate(2026, 9, d), hours = 24, watts = 50.0)
+        collect(LocalDate(2026, 9, 4), hours = 2, startHour = 22, watts = 50.0)
+        for (d in 1..5) collect(LocalDate(2026, 10, d), hours = 24, watts = 100.0)
+        val comparison = assertNotNull(load().producedComparison)
+        assertEquals(3, comparison.days)
+        assertEquals(ComparisonBasis.COMMON_DAYS, comparison.basis)
+        assertEquals(100.0, comparison.percent, 1.0)
+    }
+}

@@ -178,7 +178,7 @@ private fun TotalCard(title: String, total: EnergyTotal?, comparison: Comparison
             val against = when (it.basis) {
                 ComparisonBasis.WHOLE -> "la période précédente"
                 ComparisonBasis.FIRST_DAYS -> if (it.days == 1) "le premier jour de la période précédente" else "les ${it.days} premiers jours de la période précédente"
-                ComparisonBasis.COMMON_DAYS -> if (it.days == 1) "le seul jour mesuré des deux périodes" else "les ${it.days} jours mesurés des deux périodes"
+                ComparisonBasis.COMMON_DAYS -> if (it.days == 1) "le seul jour bien mesuré des deux périodes" else "les ${it.days} jours bien mesurés des deux périodes"
             }
             Txt("${signedFr(it.percent, 0)} % vs $against", 12.sp, FontWeight.SemiBold, p.ink2)
         }

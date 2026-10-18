@@ -37,8 +37,13 @@ import kotlin.time.Duration.Companion.seconds
 /** Fenêtre de la courbe d'historique d'un équipement. */
 private val HISTORY_WINDOW = 24.hours
 
-/** La courbe se relit à cette cadence : les agrégats sont à la minute, inutile de suivre chaque mesure. */
+/** La courbe se relit toutes les 60 s de l'horloge de la session (donc plus souvent en démo accélérée) : les agrégats sont à la minute. */
 private val HISTORY_REFRESH = 60.seconds
+
+/** On sonde l'horloge de la session à cette cadence réelle ; la relecture n'a lieu que si [historyIsStale]. */
+private val HISTORY_POLL = 1.seconds
+
+fun historyIsStale(shown: Instant, now: Instant): Boolean = now - shown >= HISTORY_REFRESH
 
 /** Les 24 heures qui se terminent à [to] ; les deux bornes viennent du même instant pour que courbe et axe restent alignés. */
 class HistoryWindow(val to: Instant) {
@@ -126,8 +131,9 @@ private fun HistoryCard(runtime: VoltdeckRuntime, device: KnownDevice, spec: His
     var loaded by remember { mutableStateOf<Pair<HistoryWindow, List<AggRow>>?>(null) }
     val now by produceState(session.clock.now(), session) {
         while (true) {
-            delay(HISTORY_REFRESH)
-            value = session.clock.now()
+            delay(HISTORY_POLL)
+            val t = session.clock.now()
+            if (historyIsStale(value, t)) value = t
         }
     }
     LaunchedEffect(database, spec, changes, device.deviceId, now) {
