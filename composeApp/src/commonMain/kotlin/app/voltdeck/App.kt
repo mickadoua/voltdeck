@@ -103,6 +103,7 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
     }
     val overview = remember(latest, devices, changes, estimatedAutonomy) { buildOverview(devices, latest, setupOf, estimatedAutonomy) }
     var backgroundEnabled by remember { mutableStateOf(background.enabled) }
+    var restartAfterBoot by remember { mutableStateOf(background.restartAfterBoot) }
     val collectInBackground = session !is DemoSession && devices.isNotEmpty()
     LaunchedEffect(collectInBackground, backgroundEnabled, changes) { background.sync(collectInBackground) }
 
@@ -175,6 +176,11 @@ fun App(runtime: VoltdeckRuntime, bluetooth: BluetoothAccess, background: Backgr
                                 onBackground = {
                                     background.enabled = it
                                     backgroundEnabled = it
+                                },
+                                restartOn = restartAfterBoot,
+                                onRestart = {
+                                    background.restartAfterBoot = it
+                                    restartAfterBoot = it
                                 },
                             )
                         }
@@ -280,6 +286,8 @@ private fun DevicesScreen(
     onRemove: (DeviceId) -> Unit,
     backgroundOn: Boolean?,
     onBackground: (Boolean) -> Unit,
+    restartOn: Boolean,
+    onRestart: (Boolean) -> Unit,
 ) {
     val p = LocalPalette.current
     val isDemo = session is DemoSession
@@ -313,6 +321,15 @@ private fun DevicesScreen(
                             Txt("Voltdeck continue de lire et d'enregistrer avec une notification. Sinon, la collecte s'arrête avec l'application.", 13.sp, color = p.ink2)
                         }
                         Choice(if (backgroundOn) "Activée" else "Désactivée", backgroundOn) { onBackground(!backgroundOn) }
+                    }
+                    if (backgroundOn) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Txt("Reprendre après un redémarrage", 16.sp, FontWeight.Bold)
+                                Txt("Relance la collecte quand le téléphone redémarre, sans ouvrir Voltdeck. Désactivé par défaut.", 13.sp, color = p.ink2)
+                            }
+                            Choice(if (restartOn) "Activée" else "Désactivée", restartOn) { onRestart(!restartOn) }
+                        }
                     }
                 }
             }

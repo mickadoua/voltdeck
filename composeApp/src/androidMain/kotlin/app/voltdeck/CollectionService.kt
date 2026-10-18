@@ -112,6 +112,12 @@ internal object BackgroundPrefs {
     fun setEnabled(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean("enabled", value).apply()
     }
+
+    fun restartAfterBoot(context: Context) = prefs(context).getBoolean("restartAfterBoot", false)
+
+    fun setRestartAfterBoot(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean("restartAfterBoot", value).apply()
+    }
 }
 
 internal class AndroidBackgroundCollection(private val context: Context, private val canConnect: () -> Boolean) : BackgroundCollection {
@@ -120,6 +126,10 @@ internal class AndroidBackgroundCollection(private val context: Context, private
     override var enabled: Boolean
         get() = BackgroundPrefs.enabled(context)
         set(value) = BackgroundPrefs.setEnabled(context, value)
+
+    override var restartAfterBoot: Boolean
+        get() = BackgroundPrefs.restartAfterBoot(context)
+        set(value) = BackgroundPrefs.setRestartAfterBoot(context, value)
 
     override fun sync(wanted: Boolean) {
         val intent = CollectionService.intent(context)
