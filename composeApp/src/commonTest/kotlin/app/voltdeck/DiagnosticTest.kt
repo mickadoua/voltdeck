@@ -61,6 +61,18 @@ class DiagnosticTest {
     }
 
     @Test
+    fun aRebootWithoutAnyTraceIsFlaggedOnlyWhenTheSettingWasOnBeforeIt() {
+        val seen = BootAttempt(t0, BootOutcome.STARTED, bootCount = 5)
+        assertTrue(bootReceiverNotCalled(true, enabledAtBootCount = 4, currentBootCount = 5, attempt = null), "redémarré, rien noté")
+        assertTrue(bootReceiverNotCalled(true, 4, 6, seen), "la trace date d'un démarrage précédent")
+        assertFalse(bootReceiverNotCalled(true, 4, 5, seen), "le récepteur a bien été appelé à ce démarrage")
+        assertFalse(bootReceiverNotCalled(true, 5, 5, null), "pas de redémarrage depuis l'activation du réglage")
+        assertFalse(bootReceiverNotCalled(false, 4, 5, null), "réglage désactivé : rien n'était attendu")
+        assertFalse(bootReceiverNotCalled(true, null, 5, null), "compteur inconnu à l'activation : pas de conclusion")
+        assertFalse(bootReceiverNotCalled(true, 4, null, null), "compteur illisible : pas de conclusion")
+    }
+
+    @Test
     fun onlyAnAndroidRefusalOrARevokedPermissionIsFlaggedAsAProblem() {
         val flagged = BootOutcome.entries.filter { bootAttemptIsProblem(BootAttempt(t0, it)) }
         assertEquals(listOf(BootOutcome.NO_PERMISSION, BootOutcome.REFUSED), flagged)

@@ -51,18 +51,37 @@ internal object BootRestart {
         conditions: () -> BootConditions,
         startService: () -> Unit,
         now: () -> Instant,
+        bootCount: () -> Int?,
         record: (BootAttempt) -> Unit,
     ) {
         if (action != Intent.ACTION_BOOT_COMPLETED) return
         val outcome = BootPolicy.decide(conditions())
-        if (outcome != BootOutcome.STARTED) return record(BootAttempt(now(), outcome))
+        if (outcome != BootOutcome.STARTED) return record(BootAttempt(now(), outcome, bootCount = bootCount()))
         try {
             startService()
-            record(BootAttempt(now(), BootOutcome.STARTED))
+            record(BootAttempt(now(), BootOutcome.STARTED, bootCount = bootCount()))
         } catch (e: Exception) {
-            record(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName))
+            record(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName, bootCount()))
         }
     }
+}
+
+internal object ServiceStart {
+    /**
+     * Passe le service au premier plan. Android peut le refuser par une [SecurityException] (droit manquant) ou, dès
+     * l'API 31, par `ForegroundServiceStartNotAllowedException` (une [IllegalStateException]) : les deux sont notées au
+     * lieu de faire tomber le processus, et un démarrage réussi efface le refus précédent.
+     */
+    fun run(startForeground: () -> Unit, now: () -> Instant, recordFailure: (BootAttempt) -> Unit, clearFailure: () -> Unit): Boolean =
+        try {
+            startForeground()
+            clearFailure()
+            true
+        } catch (e: Exception) {
+            if (e !is SecurityException && e !is IllegalStateException) throw e
+            recordFailure(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName))
+            false
+        }
 }
 
 /** Relance le service de collecte après le démarrage du téléphone, si [BootPolicy] l'autorise. */
@@ -82,6 +101,7 @@ class BootReceiver : BroadcastReceiver() {
             },
             startService = { ContextCompat.startForegroundService(context, CollectionService.intent(context)) },
             now = { Clock.System.now() },
+            bootCount = { BackgroundPrefs.bootCount(context) },
             record = { BackgroundPrefs.recordBootAttempt(context, it) },
         )
     }

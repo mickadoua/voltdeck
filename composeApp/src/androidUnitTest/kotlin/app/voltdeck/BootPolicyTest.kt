@@ -5,6 +5,7 @@ import java.io.File
 import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class BootPolicyTest {
@@ -32,11 +33,60 @@ class BootPolicyTest {
         assertEquals(BootOutcome.NO_PERMISSION, BootPolicy.decide(ready.copy(bluetoothGranted = false)))
     }
 
+    @Test
+    fun whenSeveralConditionsFailTheFirstInTheDocumentedOrderIsReported() {
+        val nothing = BootConditions(restartAfterBoot = false, collectionEnabled = false, hasDevices = false, bluetoothGranted = false)
+        assertEquals(BootOutcome.SETTING_OFF, BootPolicy.decide(nothing))
+        assertEquals(BootOutcome.STOPPED_BY_USER, BootPolicy.decide(nothing.copy(restartAfterBoot = true)))
+        assertEquals(BootOutcome.NO_DEVICE, BootPolicy.decide(nothing.copy(restartAfterBoot = true, collectionEnabled = true)))
+        assertEquals(
+            BootOutcome.NO_DEVICE,
+            BootPolicy.decide(ready.copy(hasDevices = false, bluetoothGranted = false)),
+            "sans équipement, la permission manquante n'est pas le problème à montrer",
+        )
+    }
+
+    private class Starts(val failure: Exception? = null) {
+        val failures = mutableListOf<BootAttempt>()
+        var cleared = 0
+        fun run() = ServiceStart.run({ failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { failures += it }, { cleared++ })
+    }
+
+    @Test
+    fun aServiceStartAndroidForbidsInTheBackgroundIsRecordedInsteadOfCrashing() {
+        val starts = Starts(IllegalStateException("message"))
+        assertEquals(false, starts.run())
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException")), starts.failures)
+        assertEquals(0, starts.cleared)
+    }
+
+    @Test
+    fun aMissingRightIsRecordedTheSameWay() {
+        val starts = Starts(SecurityException("message"))
+        assertEquals(false, starts.run())
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "SecurityException")), starts.failures)
+    }
+
+    @Test
+    fun aSuccessfulStartClearsThePreviousRefusal() {
+        val starts = Starts()
+        assertEquals(true, starts.run())
+        assertEquals(1, starts.cleared)
+        assertEquals(emptyList(), starts.failures)
+    }
+
+    @Test
+    fun anUnrelatedBugIsNotSwallowed() {
+        val starts = Starts(UnsupportedOperationException())
+        assertFailsWith<UnsupportedOperationException> { starts.run() }
+        assertEquals(emptyList(), starts.failures)
+    }
+
     private class Run(val conditions: BootConditions, val failure: Exception? = null) {
         var started = 0
         val recorded = mutableListOf<BootAttempt>()
         fun on(action: String?) = BootRestart.run(
-            action, { conditions }, { started++; failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { recorded += it },
+            action, { conditions }, { started++; failure?.let { throw it } }, { Instant.parse("2026-06-21T10:00:00Z") }, { 7 }, { recorded += it },
         )
     }
 
@@ -54,14 +104,14 @@ class BootPolicyTest {
         val run = Run(ready)
         run.on(Intent.ACTION_BOOT_COMPLETED)
         assertEquals(1, run.started)
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.STARTED)), run.recorded)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.STARTED, bootCount = 7)), run.recorded)
     }
 
     @Test
     fun aRefusalByAndroidIsRecordedWithItsTypeAndNeverTheMessage() {
         val run = Run(ready, failure = IllegalStateException("secret-looking message"))
         run.on(Intent.ACTION_BOOT_COMPLETED)
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException")), run.recorded)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.REFUSED, "IllegalStateException", 7)), run.recorded)
     }
 
     @Test
@@ -69,7 +119,7 @@ class BootPolicyTest {
         val run = Run(ready.copy(restartAfterBoot = false))
         run.on(Intent.ACTION_BOOT_COMPLETED)
         assertEquals(0, run.started)
-        assertEquals(listOf(BootAttempt(t0, BootOutcome.SETTING_OFF)), run.recorded)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.SETTING_OFF, bootCount = 7)), run.recorded)
     }
 
     @Test

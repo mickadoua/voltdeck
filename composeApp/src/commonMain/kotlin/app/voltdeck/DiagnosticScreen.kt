@@ -69,9 +69,20 @@ fun bootAttemptText(attempt: BootAttempt?, now: Instant): String {
     return "$what, ${ageText(now - attempt.at)}"
 }
 
-/** Un refus d'Android est le seul cas qui demande une action de l'utilisateur (restriction du constructeur, droit retiré). */
+/** Un refus d'Android ou un droit retiré demandent une action de l'utilisateur (restriction du constructeur, droit à rendre). */
 fun bootAttemptIsProblem(attempt: BootAttempt?) =
     attempt != null && (attempt.outcome == BootOutcome.REFUSED || attempt.outcome == BootOutcome.NO_PERMISSION)
+
+/**
+ * Le téléphone a redémarré depuis l'activation du réglage et le récepteur n'a rien noté pour ce démarrage : Android ne
+ * l'a pas appelé (démarrage automatique bloqué par le constructeur, application arrêtée de force). Sans le compteur de
+ * démarrages, on ne peut pas conclure et on ne crie pas.
+ */
+fun bootReceiverNotCalled(restartAfterBoot: Boolean, enabledAtBootCount: Int?, currentBootCount: Int?, attempt: BootAttempt?): Boolean {
+    if (!restartAfterBoot || enabledAtBootCount == null || currentBootCount == null) return false
+    if (currentBootCount <= enabledAtBootCount) return false
+    return attempt?.bootCount != currentBootCount
+}
 
 @Composable
 fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection, onBack: () -> Unit) {
@@ -133,7 +144,13 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, background: BackgroundCollection,
                 Line("Réglage", if (background.restartAfterBoot) "activé" else "désactivé")
                 Line("Dernière tentative", bootAttemptText(bootAttempt, wallNow))
                 if (bootAttemptIsProblem(bootAttempt)) Pill("La collecte n'a pas repris seule", Tone.WARN)
-                serviceFailure?.let { Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}") }
+                if (bootReceiverNotCalled(background.restartAfterBoot, background.restartEnabledAtBootCount, background.bootCount, bootAttempt)) {
+                    Pill("Voltdeck n'a pas été appelé au dernier démarrage du téléphone", Tone.WARN)
+                }
+                serviceFailure?.let {
+                    Line("Service refusé par Android", "${it.detail ?: "refus"}, ${ageText(wallNow - it.at)}")
+                    Pill("Android a refusé le service de collecte", Tone.WARN)
+                }
             }
         }
 
