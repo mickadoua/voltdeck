@@ -19,9 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.voltdeck.core.DeviceId
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.drivers.victron.VictronLinkStatus
+import app.voltdeck.storage.MinuteCoverage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -33,6 +37,21 @@ fun ageText(age: Duration): String = when {
     age.inWholeHours < 1 -> "il y a ${age.inWholeMinutes} min"
     else -> "il y a ${age.inWholeHours} h"
 }
+
+/** Objectif de couverture des minutes (VOL-8). */
+const val COVERAGE_TARGET = 0.95
+
+/** « 97 % (1397 sur 1440 min) », ou une explication tant qu'aucune minute n'est attendue. */
+fun coverageText(coverage: MinuteCoverage?): String {
+    val ratio = coverage?.ratio ?: return "pas encore de mesure"
+    return "${(ratio * 100).toInt()} % (${coverage.covered} sur ${coverage.expected} min)"
+}
+
+/** Vrai si la couverture est sous l'objectif sur une durée assez longue pour être un vrai trou et pas un démarrage. */
+fun coverageBelowTarget(coverage: MinuteCoverage?): Boolean =
+    coverage != null && coverage.expected >= MIN_MINUTES_JUDGED && (coverage.ratio ?: 1.0) < COVERAGE_TARGET
+
+private const val MIN_MINUTES_JUDGED = 30
 
 @Composable
 fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
@@ -49,6 +68,14 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
         while (true) {
             now = session.clock.now()
             delay(1.seconds)
+        }
+    }
+    var coverage by remember { mutableStateOf<Map<DeviceId, MinuteCoverage?>>(emptyMap()) }
+    LaunchedEffect(session, database) {
+        while (true) {
+            val at = session.clock.now()
+            coverage = withContext(Dispatchers.Default) { session.devices.associate { it.deviceId to runtime.coverage(it.deviceId, at) } }
+            delay(30.seconds)
         }
     }
     val demo = session is DemoSession
@@ -83,6 +110,12 @@ fun DiagnosticScreen(runtime: VoltdeckRuntime, onBack: () -> Unit) {
                 Txt(session.title(device.deviceId), 17.sp, FontWeight.Bold)
                 Line("Lecture", if (device.role == DeviceRole.BATTERY) "connexion (JBD)" else "écoute des annonces (Victron)")
                 Line("Dernière mesure", reading?.let { ageText(now - it.at) } ?: "aucune")
+                Line(
+                    if (device.role == DeviceRole.BATTERY) "Mesures par minute" else "Annonces par minute",
+                    runtime.readingsPerMinute(device.deviceId, now).toString(),
+                )
+                Line("Couverture des minutes (24 h)", coverageText(coverage[device.deviceId]))
+                if (coverageBelowTarget(coverage[device.deviceId])) Pill("Sous l'objectif de ${(COVERAGE_TARGET * 100).toInt()} %", Tone.WARN)
                 if (device.role == DeviceRole.BATTERY) {
                     val c = counters[device.deviceId]
                     Line("Mesures", (c?.readings ?: 0).toString())
