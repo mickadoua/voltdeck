@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.floor
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
@@ -22,6 +23,7 @@ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineCom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLabelComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLineComponent
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.compose.cartesian.data.columnSeries
@@ -39,11 +41,15 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.common.Fill
 import com.patrykandpatrick.vico.compose.common.Insets
+import com.patrykandpatrick.vico.compose.common.data.ExtraStore
 import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
 import com.patrykandpatrick.vico.compose.common.VicoTheme
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+
+private const val MINUTES_PER_HOUR = 60
+private const val MINUTES_PER_DAY = 24 * 60
 
 private fun whOrDash(v: Double?) = v?.let { "${frDecimal(it, 0)} Wh" } ?: DASH
 
@@ -135,9 +141,22 @@ fun EnergyChart(columns: EnergyColumns, slotLabel: (Int) -> String, description:
     }
 }
 
+/** Pas de l'axe horizontal : 1 minute. Imposé pour que Vico ne le déduise pas (PGCD) des écarts mesurés. */
+private val MinuteStep: (CartesianChartModel) -> Double = { 1.0 }
+
+/** Axe des x en minutes : début ramené sur un multiple de [alignMinutes] pour que les repères tombent sur des heures ou des jours pleins. */
+private class MinuteAlignedRange(
+    private val alignMinutes: Double,
+    private val base: CartesianLayerRangeProvider,
+) : CartesianLayerRangeProvider by base {
+    override fun getMinX(minX: Double, maxX: Double, extraStore: ExtraStore): Double = floor(minX / alignMinutes) * alignMinutes
+}
+
 /**
- * Courbe en tronçons : chaque trou de collecte sépare deux tronçons, jamais relié. [xLabel] reçoit des heures
- * depuis le début de la période ; [fixedY] fige l'axe vertical (0 à 100 % pour la charge).
+ * Courbe en tronçons : chaque trou de collecte sépare deux tronçons, jamais relié. [xLabel] reçoit des minutes
+ * depuis l'origine de l'axe (voir [Segment]), qui doit tomber sur une heure pleine ; un repère est posé toutes
+ * les [labelEveryMinutes] minutes (Vico en saute si les libellés se touchent). [fixedY] fige l'axe vertical
+ * (0 à 100 % pour la charge).
  */
 @Composable
 fun SegmentedLineChart(
@@ -146,6 +165,7 @@ fun SegmentedLineChart(
     unit: String,
     decimals: Int,
     xLabel: (Double) -> String,
+    labelEveryMinutes: Int,
     description: String,
     modifier: Modifier = Modifier,
     fixedY: ClosedFloatingPointRange<Double>? = null,
@@ -162,16 +182,16 @@ fun SegmentedLineChart(
             pointProvider = if (segment.x.size == 1) LineCartesianLayer.PointProvider.single(LineCartesianLayer.Point(dot, 8.dp)) else null,
         )
     }
+    val range = remember(fixedY, labelEveryMinutes) {
+        val y = if (fixedY != null) CartesianLayerRangeProvider.fixed(minY = fixedY.start, maxY = fixedY.endInclusive) else CartesianLayerRangeProvider.auto()
+        MinuteAlignedRange(if (labelEveryMinutes >= MINUTES_PER_DAY) MINUTES_PER_DAY.toDouble() else MINUTES_PER_HOUR.toDouble(), y)
+    }
     VoltdeckVicoTheme {
         CartesianChartHost(
             chart = rememberCartesianChart(
                 rememberLineCartesianLayer(
                     lineProvider = LineCartesianLayer.LineProvider.series(lines.ifEmpty { listOf(LineCartesianLayer.rememberLine()) }),
-                    rangeProvider = if (fixedY != null) {
-                        CartesianLayerRangeProvider.fixed(minY = fixedY.start, maxY = fixedY.endInclusive)
-                    } else {
-                        CartesianLayerRangeProvider.auto()
-                    },
+                    rangeProvider = range,
                 ),
                 startAxis = VerticalAxis.rememberStart(
                     label = axisLabel(),
@@ -183,6 +203,7 @@ fun SegmentedLineChart(
                     label = axisLabel(),
                     guideline = null,
                     valueFormatter = CartesianValueFormatter { _, v, _ -> xLabel(v) },
+                    itemPlacer = remember(labelEveryMinutes) { HorizontalAxis.ItemPlacer.aligned(spacing = { labelEveryMinutes }) },
                 ),
                 marker = rememberDefaultCartesianMarker(
                     label = markerLabel(),
@@ -191,6 +212,7 @@ fun SegmentedLineChart(
                         if (point == null) DASH else "${xLabel(point.entry.x)} · ${frDecimal(point.entry.y, decimals)} $unit"
                     },
                 ),
+                getXStep = MinuteStep,
             ),
             modelProducer = producer,
             modifier = modifier.semantics { contentDescription = description },

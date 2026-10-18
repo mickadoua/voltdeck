@@ -268,10 +268,12 @@ private fun TabBar(current: Screen, onSelect: (Screen) -> Unit) {
                     .semantics { selected = active },
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(
-                    label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2,
-                    if (active) Modifier.background(p.accent, CircleShape).padding(horizontal = 18.dp, vertical = 8.dp) else Modifier,
-                )
+                Box(
+                    if (active) Modifier.background(p.accent, CircleShape).padding(horizontal = 12.dp, vertical = 8.dp) else Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Txt(label, 14.sp, if (active) FontWeight.Bold else FontWeight.Medium, if (active) p.onAccent else p.ink2, oneLine = true)
+                }
             }
         }
     }

@@ -45,7 +45,6 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 @Composable
@@ -253,8 +252,9 @@ private fun SocLine(rows: List<AggRow>, from: Instant, kind: PeriodKind, zone: T
         color = p.battery,
         unit = "%",
         decimals = 0,
-        xLabel = { hours ->
-            val t = (from + (hours * 3600).toLong().seconds).toLocalDateTime(zone)
+        labelEveryMinutes = if (kind == PeriodKind.DAY) 180 else 24 * 60,
+        xLabel = { minutes ->
+            val t = instantAt(from, minutes).toLocalDateTime(zone)
             if (kind == PeriodKind.DAY) "${t.hour} h" else "${t.date.day}/${t.date.month.ordinal + 1}"
         },
         description = "Charge de la batterie, de 0 à 100 %",

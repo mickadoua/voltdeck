@@ -155,18 +155,24 @@ private fun HistoryCard(runtime: VoltdeckRuntime, device: KnownDevice, spec: His
             Txt("Aucune mesure enregistrée sur les dernières 24 heures.", 14.sp, color = p.ink2)
         } else {
             val (window, rows) = shown
-            val from = window.from
-            val segments = remember(shown) { segmentsOf(rows, from) }
+            val origin = remember(shown) { startOfHour(window.from, runtime.zone) }
+            val segments = remember(shown) { segmentsOf(rows, origin) }
             SegmentedLineChart(
                 segments = segments,
                 color = if (spec.metric == app.voltdeck.core.Metric.PV_POWER) p.solar else p.battery,
                 unit = spec.unit,
                 decimals = spec.decimals,
-                xLabel = { hours -> "${(from + (hours * 3600).toLong().seconds).toLocalDateTime(runtime.zone).hour} h" },
+                labelEveryMinutes = 180,
+                xLabel = { minutes -> "${instantAt(origin, minutes).toLocalDateTime(runtime.zone).hour} h" },
                 description = spec.title,
                 modifier = Modifier.fillMaxWidth().height(180.dp),
                 fixedY = if (spec.fixedPercent) 0.0..100.0 else null,
             )
+            val first = rows.minOf { it.start }
+            if (first - window.from > 1.hours) {
+                val t = first.toLocalDateTime(runtime.zone)
+                Txt("Mesures disponibles depuis ${t.hour} h ${t.minute.toString().padStart(2, '0')}.", 13.sp, color = p.ink2)
+            }
         }
     }
 }
