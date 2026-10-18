@@ -34,16 +34,18 @@ class AggregateReader(private val database: VoltdeckDatabase) {
 
             Level.DAY -> {
                 val (firstKey, endKey) = dayKeyRange(from, to, zone)
+                val zoneFor = zoneResolver(zone)
                 database.dayQueries.selectDay(device, metric, channel, firstKey, endKey).executeAsList()
-                    .map { AggRow(LocalDate.parse(it.day).start(zoneFor(it.tz_id, zone)), AggStats(it.count, it.min, it.max, it.sum, it.last)) }
+                    .map { AggRow(LocalDate.parse(it.day).start(zoneFor(it.tz_id)), AggStats(it.count, it.min, it.max, it.sum, it.last)) }
                     .filter { it.start >= from && it.start < to }
             }
 
             Level.MONTH -> {
                 val firstKey = monthKey(from.localDate(zone))
                 val endKey = monthKey((to - 1.nanoseconds).localDate(zone).firstOfNextMonth())
+                val zoneFor = zoneResolver(zone)
                 database.monthQueries.selectMonth(device, metric, channel, firstKey, endKey).executeAsList()
-                    .map { AggRow(parseMonthKey(it.month).start(zoneFor(it.tz_id, zone)), AggStats(it.count, it.min, it.max, it.sum, it.last)) }
+                    .map { AggRow(parseMonthKey(it.month).start(zoneFor(it.tz_id)), AggStats(it.count, it.min, it.max, it.sum, it.last)) }
                     .filter { it.start >= from && it.start < to }
             }
         }
@@ -99,7 +101,7 @@ class AggregateReader(private val database: VoltdeckDatabase) {
             return AggRow(instantOf(it.bucket_start), AggStats(it.count, it.min, it.max, it.sum, it.last))
         }
         database.dayQueries.selectLatestDay(device, metric, channel).executeAsOneOrNull()?.let {
-            return AggRow(LocalDate.parse(it.day).start(zoneFor(it.tz_id, zone)), AggStats(it.count, it.min, it.max, it.sum, it.last))
+            return AggRow(LocalDate.parse(it.day).start(zoneResolver(zone)(it.tz_id)), AggStats(it.count, it.min, it.max, it.sum, it.last))
         }
         return null
     }
@@ -125,10 +127,18 @@ class AggregateReader(private val database: VoltdeckDatabase) {
         return first.toString() to end.toString()
     }
 
-    private fun zoneFor(id: String, fallback: TimeZone): TimeZone = try {
-        TimeZone.of(id)
-    } catch (_: Exception) {
-        fallback
+    /** Résout les fuseaux enregistrés une seule fois par lecture : `TimeZone.of` coûte ~1 ms par appel sur iOS (VOL-27). */
+    private fun zoneResolver(fallback: TimeZone): (String) -> TimeZone {
+        val resolved = HashMap<String, TimeZone>()
+        return { id ->
+            resolved.getOrPut(id) {
+                try {
+                    TimeZone.of(id)
+                } catch (_: Exception) {
+                    fallback
+                }
+            }
+        }
     }
 }
 
