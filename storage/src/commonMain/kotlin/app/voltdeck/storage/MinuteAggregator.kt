@@ -106,7 +106,8 @@ class MinuteAggregator(private val database: VoltdeckDatabase, private val bucke
     }
 
     private fun flushBefore(minuteExclusive: Long) {
-        val byMinute = pending.entries.filter { it.key.minute < minuteExclusive }.groupBy { it.key.minute }
+        // Copie en paires : sur Kotlin/Native, une entrée de HashMap lève ConcurrentModificationException dès que la map a changé.
+        val byMinute = pending.entries.filter { it.key.minute < minuteExclusive }.map { it.key to it.value }.groupBy { it.first.minute }
         for (minute in byMinute.keys.sorted()) {
             val entries = byMinute.getValue(minute)
             database.transaction {
