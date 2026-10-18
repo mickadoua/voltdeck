@@ -18,7 +18,9 @@ import kotlin.time.Instant
 /**
  * Historique « two_years_history » : deux ans d'heures pour trois équipements et neuf séries chacun, puis les requêtes de
  * graphique. Condition de réussite de VOL-7 : un an se lit en moins de 300 ms (sur l'émulateur de référence ; ce test mesure
- * le même code sur la JVM, et affiche la mesure dans la sortie standard sous le préfixe PERF).
+ * le même code sur la JVM et sur le simulateur iOS, et affiche la mesure sous le préfixe PERF, dans la sortie standard et dans
+ * le message d'assertion). Sur iOS, ce test garde la lecture des jours contre le retour d'un `TimeZone.of` par ligne (~1,3 ms
+ * l'appel, 488 ms pour un an avant VOL-27, 12 ms après).
  */
 class TwoYearsHistoryTest {
     private val now = Instant.parse("2026-10-17T12:00:00Z")
@@ -68,21 +70,24 @@ class TwoYearsHistoryTest {
         val key = SeriesKey(BMS, Metric.BATTERY_VOLTAGE)
 
         val (yearMs, yearPoints) = timed { reader.series(key, now - 365.days, now, now, zone).rows.size }
+        val (yearSqlMs, yearSqlRows) = timed { reader.stored(Level.DAY, key, now - 365.days, now, zone).size }
+        val (rawSqlMs, rawSqlRows) = timed { db.dayQueries.selectDay(BMS.value, key.metric.name, 0, "2025-01-01", "2027-01-01").executeAsList().size }
         val (energyMs, energyPoints) = timed { reader.series(SeriesKey(MPPT, Metric.PV_ENERGY_WH), now - 365.days, now, now, zone).rows.size }
         val (twoYearsMs, twoYearsPoints) = timed { reader.series(key, now - 730.days, now, now, zone).rows.size }
-        val (stackMs, _) = timed { metrics.sumOf { reader.series(SeriesKey(SHUNT, it), now - 365.days, now, now, zone).rows.size } }
+        val (stackMs, stackPoints) = timed { metrics.sumOf { reader.series(SeriesKey(SHUNT, it), now - 365.days, now, now, zone).rows.size } }
         val (monthMs, monthPoints) = timed { reader.series(key, now - 60.days, now, now, zone).rows.size }
-        println("PERF un an (jours): $yearMs ms, $yearPoints points")
-        println("PERF un an, énergie: $energyMs ms, $energyPoints points")
-        println("PERF deux ans: $twoYearsMs ms, $twoYearsPoints points")
-        println("PERF un an, ${metrics.size} séries d'un écran: $stackMs ms")
-        println("PERF 60 jours (heures): $monthMs ms, $monthPoints points")
+        val level = reader.series(key, now - 365.days, now, now, zone).level
+        val report = "PERF un an (jours): $yearMs ms, $yearPoints points, niveau $level; " +
+            "stored(DAY) seul: $yearSqlMs ms, $yearSqlRows lignes; SQL brut sans mapping: $rawSqlMs ms, $rawSqlRows lignes; " +
+            "un an, énergie: $energyMs ms, $energyPoints points; deux ans: $twoYearsMs ms, $twoYearsPoints points; " +
+            "un an, ${metrics.size} séries d'un écran: $stackMs ms, $stackPoints points; 60 jours (heures): $monthMs ms, $monthPoints points"
+        println(report)
 
-        assertTrue(yearMs < 300, "un an : $yearMs ms")
-        assertTrue(stackMs < 300, "un an, ${metrics.size} séries : $stackMs ms")
-        assertTrue(yearPoints <= MAX_CHART_POINTS && twoYearsPoints <= MAX_CHART_POINTS && monthPoints <= MAX_CHART_POINTS)
-        assertEquals(Level.DAY, reader.series(key, now - 365.days, now, now, zone).level)
-        assertTrue(yearPoints in 360..367)
+        assertTrue(yearMs < 300, "un an trop lent. $report")
+        assertTrue(stackMs < 300, "un an sur ${metrics.size} séries trop lent. $report")
+        assertTrue(yearPoints <= MAX_CHART_POINTS && twoYearsPoints <= MAX_CHART_POINTS && monthPoints <= MAX_CHART_POINTS, "trop de points. $report")
+        assertEquals(Level.DAY, level, report)
+        assertTrue(yearPoints in 360..367, "nombre de points d'un an. $report")
     }
 
 }

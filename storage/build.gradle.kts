@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -59,5 +60,14 @@ sqldelight {
             deriveSchemaFromMigrations.set(true)
             verifyMigrations.set(true)
         }
+    }
+}
+
+// Un test rouge doit dire pourquoi dans le journal de CI (message d'assertion, sortie standard) : sans cela les cibles natives n'affichent que « AssertionError ».
+tasks.withType<AbstractTestTask>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = TestExceptionFormat.FULL
+        showStandardStreams = true
     }
 }
