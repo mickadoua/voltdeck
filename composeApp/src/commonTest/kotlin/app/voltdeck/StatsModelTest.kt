@@ -2,8 +2,10 @@ package app.voltdeck
 
 import app.voltdeck.simulator.AcceleratedClock
 import app.voltdeck.storage.EnergyBucket
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,6 +27,34 @@ class StatsModelTest {
         assertEquals(31, StatsPeriod(PeriodKind.MONTH, friday).days.size)
         assertEquals(LocalDate(2026, 9, 1), StatsPeriod(PeriodKind.MONTH, friday).previous().first)
         assertEquals(LocalDate(2026, 10, 17), StatsPeriod(PeriodKind.DAY, friday).next().first)
+    }
+
+    @Test
+    fun aYearRunsFromJanuaryFirstToTheNextOne() {
+        val year = StatsPeriod(PeriodKind.YEAR, friday)
+        assertEquals(LocalDate(2026, 1, 1), year.first)
+        assertEquals(LocalDate(2027, 1, 1), year.endExclusive)
+        assertEquals(365, year.days.size)
+        assertEquals(LocalDate(2025, 1, 1), year.previous().first)
+        assertEquals(LocalDate(2027, 1, 1), year.next().first)
+        assertEquals(366, StatsPeriod(PeriodKind.YEAR, LocalDate(2028, 6, 1)).days.size)
+        assertEquals("2026", year.label)
+        assertTrue(year.contains(LocalDate(2026, 12, 31)))
+        assertFalse(year.contains(LocalDate(2027, 1, 1)))
+    }
+
+    @Test
+    fun theYearViewIsTheFourthTab() {
+        assertEquals(listOf("Jour", "Semaine", "Mois", "Année"), PeriodKind.entries.map { it.label })
+    }
+
+    @Test
+    fun aYearInProgressIsComparedOnItsFinishedDaysAgainstTheSameDaysOfLastYear() {
+        val (current, previous) = comparableDays(StatsPeriod(PeriodKind.YEAR, friday), today = friday)
+        assertEquals(LocalDate(2026, 1, 1), current.first())
+        assertEquals(friday.minus(1, DateTimeUnit.DAY), current.last())
+        assertEquals(current.size, previous.size)
+        assertEquals(LocalDate(2025, 1, 1), previous.first())
     }
 
     @Test

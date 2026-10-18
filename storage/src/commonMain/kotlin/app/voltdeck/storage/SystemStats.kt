@@ -31,33 +31,48 @@ class SystemStats(
      * Par MPPT : dernier `YIELD_TODAY` du jour ([Nature.DEVICE_COMPUTED]), sinon l'énergie intégrée sur `PV_POWER`
      * ([Nature.CALCULATED], côté panneaux). Un MPPT sans aucune des deux mesures ne compte pas et abaisse [Stat.coverage].
      */
-    fun solarProduction(day: LocalDate, zone: TimeZone): Stat {
-        val from = day.start(zone)
-        val to = day.nextDay().start(zone)
-        val chargers = activeDevices(DeviceRole.SOLAR_CHARGER, from, to)
-        if (chargers.isEmpty()) return Stat.unavailable("kWh", Absence.NO_SOURCE)
-        var total = 0.0
-        var counted = 0
-        var calculated = false
-        for (charger in chargers) {
-            val yieldToday = reader.daily(SeriesKey(charger.id, Metric.YIELD_TODAY), from, to, zone).firstOrNull()
-            if (yieldToday != null) {
-                total += yieldToday.stats.last
+    fun solarProduction(day: LocalDate, zone: TimeZone): Stat = solarProduction(listOf(day), zone).getValue(day)
+
+    /**
+     * [solarProduction] de plusieurs jours à la fois, avec une lecture par MPPT et par mesure pour toute la plage plutôt qu'une par jour :
+     * la vue Année en demande plusieurs centaines. Même résultat que jour par jour.
+     */
+    fun solarProduction(days: List<LocalDate>, zone: TimeZone): Map<LocalDate, Stat> {
+        if (days.isEmpty()) return emptyMap()
+        val registered = devices.all()
+        val first = days.min().start(zone)
+        val end = days.max().nextDay().start(zone)
+        val rows = HashMap<Pair<DeviceId, Metric>, Map<LocalDate, List<AggRow>>>()
+        fun dayRow(id: DeviceId, metric: Metric, day: LocalDate): AggRow? =
+            rows.getOrPut(id to metric) { reader.daily(SeriesKey(id, metric), first, end, zone).groupBy { it.start.localDate(zone) } }[day]?.first()
+        return days.associateWith { day ->
+            val from = day.start(zone)
+            val to = day.nextDay().start(zone)
+            val chargers = activeDevices(DeviceRole.SOLAR_CHARGER, from, to, registered)
+            if (chargers.isEmpty()) return@associateWith Stat.unavailable("kWh", Absence.NO_SOURCE)
+            var total = 0.0
+            var counted = 0
+            var calculated = false
+            for (charger in chargers) {
+                val yieldToday = dayRow(charger.id, Metric.YIELD_TODAY, day)
+                if (yieldToday != null) {
+                    total += yieldToday.stats.last
+                    counted++
+                    continue
+                }
+                val integrated = dayRow(charger.id, Metric.PV_ENERGY_WH, day) ?: continue
+                total += integrated.stats.sum / 1000.0
                 counted++
-                continue
+                calculated = true
             }
-            val integrated = reader.daily(SeriesKey(charger.id, Metric.PV_ENERGY_WH), from, to, zone).firstOrNull() ?: continue
-            total += integrated.stats.sum / 1000.0
-            counted++
-            calculated = true
+            if (counted == 0) return@associateWith Stat.unavailable("kWh", Absence.NO_DATA)
+            Stat(
+                value = total,
+                unit = "kWh",
+                nature = if (calculated) Nature.CALCULATED else Nature.DEVICE_COMPUTED,
+                coverage = counted.toDouble() / chargers.size,
+            )
         }
-        if (counted == 0) return Stat.unavailable("kWh", Absence.NO_DATA)
-        return Stat(
-            value = total,
-            unit = "kWh",
-            nature = if (calculated) Nature.CALCULATED else Nature.DEVICE_COMPUTED,
-            coverage = counted.toDouble() / chargers.size,
-        )
     }
 
     /**
@@ -74,24 +89,53 @@ class SystemStats(
      * est refusé comme [Absence.INCONSISTENT] : c'est le signe qu'une de ces hypothèses est fausse.
      * Pour la même raison, sans aucun MPPT ni DC-DC enregistré, la consommation est absente : un chargeur inconnu fausserait tout.
      */
-    fun consumption(day: LocalDate, zone: TimeZone, now: Instant): Stat {
-        val from = day.start(zone)
-        val to = day.nextDay().start(zone)
-        val flowDevice = flowDevice(from, to, hasHours(Metric.ENERGY_IN_WH, from, to))
-            ?: return Stat.unavailable("Wh", Absence.NO_FLOW_SENSOR)
-        val sources = activeDevices(DeviceRole.SOLAR_CHARGER, from, to)
-        val converters = activeDevices(DeviceRole.DCDC, from, to)
-        if (sources.isEmpty() && converters.isEmpty()) return Stat.unavailable("Wh", Absence.NO_SOURCE)
+    fun consumption(day: LocalDate, zone: TimeZone, now: Instant): Stat = consumption(listOf(day), zone, now).getValue(day)
 
-        val recent = from.epochSeconds >= (now - MINUTE_RETENTION).hourStart()
-        val level = if (recent && rowsOf(Level.MINUTE, SeriesKey(flowDevice.id, Metric.ENERGY_IN_WH), from, to, zone).isNotEmpty()) Level.MINUTE else Level.HOUR
-        fun series(id: DeviceId, metric: Metric) = rowsOf(level, SeriesKey(id, metric), from, to, zone)
+    /**
+     * [consumption] de plusieurs jours à la fois : les heures de chaque série sont lues une fois pour toute la plage, plutôt qu'une
+     * fois par jour (la vue Année en demande plusieurs centaines) ; les minutes des jours récents restent lues jour par jour.
+     * Même résultat que jour par jour, ce que vérifie un test.
+     */
+    fun consumption(days: List<LocalDate>, zone: TimeZone, now: Instant): Map<LocalDate, Stat> {
+        if (days.isEmpty()) return emptyMap()
+        val registered = devices.all()
+        val oldest = days.min().start(zone)
+        val newest = days.max().nextDay().start(zone)
+        val hourRows = HashMap<SeriesKey, Map<LocalDate, Map<Instant, AggStats>>>()
+        fun hoursOf(id: DeviceId, metric: Metric, day: LocalDate): Map<Instant, AggStats> =
+            hourRows.getOrPut(SeriesKey(id, metric)) {
+                reader.hourly(SeriesKey(id, metric), oldest, newest).groupBy { it.start.localDate(zone) }
+                    .mapValues { (_, rows) -> rows.associate { it.start to it.stats } }
+            }[day].orEmpty()
 
-        val flowIn = series(flowDevice.id, Metric.ENERGY_IN_WH)
-        val flowOut = series(flowDevice.id, Metric.ENERGY_OUT_WH)
-        val sourceEnergy = sources.map { series(it.id, Metric.ENERGY_IN_WH) to series(it.id, Metric.ENERGY_OUT_WH) }
-        val converterStates = converters.map { series(it.id, Metric.DEVICE_STATE) }
+        return days.associateWith { day ->
+            val from = day.start(zone)
+            val to = day.nextDay().start(zone)
+            val recent = from.epochSeconds >= (now - MINUTE_RETENTION).hourStart()
+            val flowDevice = flowDevice(from, to, registered) { hoursOf(it.id, Metric.ENERGY_IN_WH, day).isNotEmpty() }
+                ?: return@associateWith Stat.unavailable("Wh", Absence.NO_FLOW_SENSOR)
+            val sources = activeDevices(DeviceRole.SOLAR_CHARGER, from, to, registered)
+            val converters = activeDevices(DeviceRole.DCDC, from, to, registered)
+            if (sources.isEmpty() && converters.isEmpty()) return@associateWith Stat.unavailable("Wh", Absence.NO_SOURCE)
 
+            val level = if (recent && rowsOf(Level.MINUTE, SeriesKey(flowDevice.id, Metric.ENERGY_IN_WH), from, to, zone).isNotEmpty()) Level.MINUTE else Level.HOUR
+            fun series(id: DeviceId, metric: Metric): Map<Instant, AggStats> =
+                if (level == Level.MINUTE) rowsOf(level, SeriesKey(id, metric), from, to, zone) else hoursOf(id, metric, day)
+            consumptionOf(
+                flowIn = series(flowDevice.id, Metric.ENERGY_IN_WH),
+                flowOut = series(flowDevice.id, Metric.ENERGY_OUT_WH),
+                sourceEnergy = sources.map { series(it.id, Metric.ENERGY_IN_WH) to series(it.id, Metric.ENERGY_OUT_WH) },
+                converterStates = converters.map { series(it.id, Metric.DEVICE_STATE) },
+            )
+        }
+    }
+
+    private fun consumptionOf(
+        flowIn: Map<Instant, AggStats>,
+        flowOut: Map<Instant, AggStats>,
+        sourceEnergy: List<Pair<Map<Instant, AggStats>, Map<Instant, AggStats>>>,
+        converterStates: List<Map<Instant, AggStats>>,
+    ): Stat {
         val observed = flowIn.keys.sorted()
         if (observed.isEmpty()) return Stat.unavailable("Wh", Absence.NO_DATA)
         var complete = 0
@@ -122,7 +166,7 @@ class SystemStats(
             if (timeToGo != null) return Stat(timeToGo.stats.last / 60.0, "h", Nature.DEVICE_COMPUTED)
         }
         val window = now - 25.hours
-        val flowDevice = flowDevice(window, now, hasHours(Metric.CHARGE_IN_AH, window, now))
+        val flowDevice = flowDevice(window, now, hasData = hasHours(Metric.CHARGE_IN_AH, window, now))
             ?: return Stat.unavailable("h", Absence.NO_FLOW_SENSOR)
         val battery = activeDevices(DeviceRole.BATTERY, now, now)
             .firstNotNullOfOrNull { b -> latest(SeriesKey(b.id, Metric.REMAINING_CAPACITY)) }
@@ -167,15 +211,15 @@ class SystemStats(
         return Stat(row.stats.last, metric.unit, Nature.MEASURED)
     }
 
-    private fun activeDevices(role: DeviceRole, from: Instant, to: Instant): List<DeviceInfo> =
-        devices.all().filter { it.role == role && it.isActiveDuring(from, to.coerceAtLeast(from + 1.seconds)) }
+    private fun activeDevices(role: DeviceRole, from: Instant, to: Instant, registered: List<DeviceInfo> = devices.all()): List<DeviceInfo> =
+        registered.filter { it.role == role && it.isActiveDuring(from, to.coerceAtLeast(from + 1.seconds)) }
 
     /**
      * Capteur du flux net de la batterie : le shunt monté sur la batterie s'il existe, sinon le BMS (VOL-1 §11-5). Un shunt enregistré
      * qui n'a aucune mesure utile sur la période cède la place au BMS qui en a ; si aucun n'en a, le premier candidat.
      */
-    private fun flowDevice(from: Instant, to: Instant, hasData: (DeviceInfo) -> Boolean): DeviceInfo? {
-        val candidates = activeDevices(DeviceRole.SHUNT, from, to).filter { measuresBattery(it.id) } + activeDevices(DeviceRole.BATTERY, from, to)
+    private fun flowDevice(from: Instant, to: Instant, registered: List<DeviceInfo> = devices.all(), hasData: (DeviceInfo) -> Boolean): DeviceInfo? {
+        val candidates = activeDevices(DeviceRole.SHUNT, from, to, registered).filter { measuresBattery(it.id) } + activeDevices(DeviceRole.BATTERY, from, to, registered)
         return candidates.firstOrNull(hasData) ?: candidates.firstOrNull()
     }
 
