@@ -85,7 +85,7 @@ fun startOfHour(t: Instant, zone: TimeZone): Instant {
  * Colonnes d'énergie. [produced] et [consumed] gardent la valeur lue (`null` = pas de mesure, à lire « — »,
  * comme le tableau) ; seules [producedDrawn] et [consumedDrawn] servent au dessin : colonne vide et jamais sous l'axe.
  */
-class EnergyColumns(val produced: List<Double?>, val consumed: List<Double?>) {
+class EnergyColumns(val produced: List<Double?>, val consumed: List<Double?>, val consumedCoverage: List<Double?> = consumed.map { null }) {
     val producedDrawn: List<Double> = produced.map { (it ?: 0.0).coerceAtLeast(0.0) }
     val consumedDrawn: List<Double> = consumed.map { (it ?: 0.0).coerceAtLeast(0.0) }
 }
@@ -95,7 +95,15 @@ fun energyColumns(slots: List<Instant>, buckets: List<EnergyBucket>): EnergyColu
     return EnergyColumns(
         slots.map { byStart[it]?.producedWh },
         slots.map { byStart[it]?.consumedWh },
+        slots.map { byStart[it]?.consumedCoverage },
     )
+}
+
+/** « 1 200 Wh », « 1 200 Wh (couverture 90 %) » quand une partie seulement du mois a une consommation, « — » sans valeur. */
+fun consumedLabel(wh: Double?, coverage: Double?): String {
+    if (wh == null) return DASH
+    val base = "${frDecimal(wh, 0)} Wh"
+    return if (coverage != null && coverage < 1.0) "$base (couverture ${frDecimal(coverage * 100, 0)} %)" else base
 }
 
 private const val SECONDS_PER_MINUTE = 60L

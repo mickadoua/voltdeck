@@ -100,6 +100,16 @@ class ChartModelTest {
     }
 
     @Test
+    fun aPartialMonthCarriesItsConsumptionCoverageToTheReadout() {
+        val slots = listOf(t0, t0 + 1.hours)
+        val columns = energyColumns(slots, listOf(EnergyBucket(t0, 400.0, 390.0, 290.0, 29.0 / 30.0), EnergyBucket(t0 + 1.hours, 400.0, 390.0, 300.0, 1.0)))
+        assertEquals("290 Wh (couverture 97 %)", consumedLabel(columns.consumed[0], columns.consumedCoverage[0]))
+        assertEquals("300 Wh", consumedLabel(columns.consumed[1], columns.consumedCoverage[1]))
+        assertEquals(DASH, consumedLabel(null, 0.0))
+        assertEquals("40 Wh", consumedLabel(40.0, null))
+    }
+
+    @Test
     fun aSystemWithoutSolarNeverReadsZeroProduced() {
         val slots = listOf(t0)
         val columns = energyColumns(slots, listOf(EnergyBucket(t0, null, null, 40.0)))

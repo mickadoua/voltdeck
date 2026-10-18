@@ -142,7 +142,7 @@ fun EnergyChart(columns: EnergyColumns, slotLabel: (Int) -> String, description:
                         if (target == null || at == null) {
                             DASH
                         } else {
-                            "${slotLabel(at)} · produite ${whOrDash(columns.produced[at])} · consommée ${whOrDash(columns.consumed[at])}"
+                            "${slotLabel(at)} · produite ${whOrDash(columns.produced[at])} · consommée ${consumedLabel(columns.consumed[at], columns.consumedCoverage[at])}"
                         }
                     },
                 ),

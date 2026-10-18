@@ -109,7 +109,7 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
             }
         }
 
-        val d = data
+        val d = data.shownFor(period)
         if (database == null) {
             Card(Modifier.fillMaxWidth()) { Txt("Pas de statistiques : la base de données n'est pas disponible sur cet appareil.", 14.sp, color = p.ink2) }
             return@Column
@@ -254,7 +254,7 @@ private fun EnergyTable(slots: List<Instant>, d: StatsData, zone: TimeZone) {
             Row(Modifier.fillMaxWidth()) {
                 Txt(slotLabel(s, d.level, zone), 13.sp, color = p.ink2, modifier = Modifier.weight(1f))
                 Txt(wh(b?.producedWh), 13.sp, modifier = Modifier.weight(1f))
-                Txt(wh(b?.consumedWh), 13.sp, modifier = Modifier.weight(1f))
+                Txt(consumedLabel(b?.consumedWh, b?.consumedCoverage), 13.sp, modifier = Modifier.weight(1f))
             }
         }
     }

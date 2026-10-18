@@ -89,7 +89,7 @@ class EnergyHistoryTest {
     }
 
     @Test
-    fun aMonthWhereTheBatteryFlowWasMissingSomeDaysHasNoConsumption() {
+    fun aMonthWhereTheBatteryFlowWasMissingSomeDaysSumsOnlyTheDaysThatHaveConsumption() {
         val months = monthlyOf(
             listOf(
                 dayBucket("2026-03-01", 300.0, 100.0, 200.0),
@@ -100,7 +100,26 @@ class EnergyHistoryTest {
         )
         assertEquals(1200.0, months.single().producedWh)
         assertEquals(200.0, months.single().batteryNetWh)
-        assertNull(months.single().consumedWh, "production d'un mois entier moins flux de quelques jours : consommation gonflée")
+        assertEquals(600.0, months.single().consumedWh, "pas « production du mois − flux de quelques jours » (900 Wh de trop)")
+        assertEquals(2.0 / 3.0, months.single().consumedCoverage)
+    }
+
+    @Test
+    fun oneInconsistentDayDoesNotHideTheConsumptionOfTheWholeMonth() {
+        val days = (1..30).map { dayBucket("2026-03-${it.toString().padStart(2, '0')}", 400.0, 390.0, 10.0) }.toMutableList()
+        days[14] = dayBucket("2026-03-15", 400.0, 404.0, null)
+        val month = monthlyOf(days, UTC).single()
+        assertEquals(290.0, month.consumedWh)
+        assertEquals(29.0 / 30.0, month.consumedCoverage)
+    }
+
+    @Test
+    fun aCompleteMonthHasFullCoverageAndAMonthWithoutAnyConsumptionHasNoValue() {
+        val complete = monthlyOf(listOf(dayBucket("2026-03-01", 300.0, 100.0, 200.0), dayBucket("2026-03-02", 400.0, 10.0, 390.0)), UTC).single()
+        assertEquals(1.0, complete.consumedCoverage)
+        val none = monthlyOf(listOf(dayBucket("2026-03-01", 300.0, null, null), dayBucket("2026-03-02", 400.0, null, null)), UTC).single()
+        assertNull(none.consumedWh)
+        assertEquals(0.0, none.consumedCoverage)
     }
 
     @Test
