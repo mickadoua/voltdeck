@@ -11,8 +11,11 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class CoverageTest {
-    private val db = createTestDatabase().also { it.addDevice(BMS, DeviceRole.BATTERY); it.addDevice(MPPT, DeviceRole.SOLAR_CHARGER) }
     private val t0 = Instant.parse("2026-03-10T00:00:00Z")
+    private val db = createTestDatabase().also {
+        it.addDevice(BMS, DeviceRole.BATTERY, createdAt = t0)
+        it.addDevice(MPPT, DeviceRole.SOLAR_CHARGER, createdAt = t0)
+    }
     private val reader = CoverageReader(db)
 
     private fun record(vararg minutes: Int, id: app.voltdeck.core.DeviceId = BMS, metric: Metric = Metric.SOC) {
@@ -22,10 +25,15 @@ class CoverageTest {
     }
 
     @Test
-    fun noMeasureMeansNothingExpected() {
-        val coverage = reader.minutes(BMS, t0 + 1.hours)
+    fun anUnknownDeviceHasNothingExpected() {
+        val coverage = reader.minutes(DCDC, t0 + 1.hours)
         assertEquals(MinuteCoverage(0, 0), coverage)
         assertNull(coverage.ratio)
+    }
+
+    @Test
+    fun aRegisteredDeviceThatNeverReportedIsAGapNotAnAbsence() {
+        assertEquals(MinuteCoverage(covered = 0, expected = 58), reader.minutes(BMS, t0 + 1.hours))
     }
 
     @Test
@@ -37,10 +45,32 @@ class CoverageTest {
     }
 
     @Test
-    fun theWindowStartsAtTheFirstMeasureNotAt24HoursAgo() {
+    fun theWindowStartsAtTheRegistrationNotAt24HoursAgo() {
+        db.addDevice(DCDC, DeviceRole.DCDC, createdAt = t0 + 2.hours)
+        record(*(120..179).toList().toIntArray(), id = DCDC)
+        assertEquals(MinuteCoverage(60, 60), reader.minutes(DCDC, t0 + 3.hours + 90.seconds))
+    }
+
+    @Test
+    fun aLateFirstMeasureLeavesTheTimeSinceRegistrationAsAGap() {
         record(*(120..179).toList().toIntArray())
-        val coverage = reader.minutes(BMS, t0 + 3.hours + 90.seconds)
-        assertEquals(MinuteCoverage(60, 60), coverage)
+        assertEquals(MinuteCoverage(covered = 60, expected = 180), reader.minutes(BMS, t0 + 3.hours + 90.seconds))
+    }
+
+    @Test
+    fun cellsAndProbesAloneAreNotAMeasure() {
+        record(0, 1, metric = Metric.SOC)
+        db.minuteQueries.upsertMinute(BMS.value, Metric.CELL_VOLTAGE.name, 3, (t0 + 2.minutes).epochSeconds, 1, 3.3, 3.3, 3.3, 3.3)
+        db.minuteQueries.upsertMinute(BMS.value, Metric.TEMPERATURE.name, 1, (t0 + 2.minutes).epochSeconds, 1, 20.0, 20.0, 20.0, 20.0)
+        assertEquals(MinuteCoverage(covered = 2, expected = 3), reader.minutes(BMS, t0 + 3.minutes + 90.seconds))
+    }
+
+    @Test
+    fun everyScalarMetricCountsAsAMeasure() {
+        val scalar = Metric.entries - DERIVED_METRICS - INDEXED_METRICS
+        scalar.forEachIndexed { i, metric -> record(i, metric = metric) }
+        val expected = scalar.size
+        assertEquals(MinuteCoverage(covered = expected, expected = expected), reader.minutes(BMS, t0 + expected.minutes + 90.seconds))
     }
 
     @Test

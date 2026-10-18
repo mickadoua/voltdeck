@@ -39,10 +39,9 @@ SELECT COUNT(*) FROM agg_minute;
 selectLatestMinute:
 SELECT * FROM agg_minute WHERE device_id = ? AND metric = ? AND channel = ? ORDER BY bucket_start DESC LIMIT 1;
 
--- Couverture : minutes distinctes portant au moins une mesure brute (les métriques dérivées sont exclues par l'appelant).
+-- Couverture : minutes distinctes portant au moins une mesure brute scalaire. Restreinte à `channel = 0` et à une liste
+-- explicite de métriques pour que SQLite cherche par clé primaire (device, métrique, canal, minute) au lieu de parcourir
+-- les 30 jours de cellules et de sondes de l'équipement.
 countRawMinutes:
 SELECT COUNT(DISTINCT bucket_start) FROM agg_minute
-WHERE device_id = ? AND metric NOT IN ? AND bucket_start >= ? AND bucket_start < ?;
-
-firstRawMinute:
-SELECT MIN(bucket_start) AS first_bucket FROM agg_minute WHERE device_id = ? AND metric NOT IN ?;
+WHERE device_id = ? AND channel = 0 AND metric IN ? AND bucket_start >= ? AND bucket_start < ?;
