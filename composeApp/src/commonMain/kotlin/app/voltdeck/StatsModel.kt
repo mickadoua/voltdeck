@@ -129,7 +129,7 @@ fun comparableDays(period: StatsPeriod, today: LocalDate): Pair<List<LocalDate>,
 /** Un jour ne compte dans une comparaison que s'il a au moins ce nombre d'heures mesurées : une demi-journée fausserait le total. */
 const val MIN_MEASURED_HOURS = 20
 
-/** Jours locaux dont au moins [MIN_MEASURED_HOURS] créneaux horaires satisfont [measured] (`produced` ou flux de la batterie connu). */
+/** Jours locaux dont au moins [MIN_MEASURED_HOURS] créneaux horaires satisfont [measured] (production connue pour la production ; production ET flux de la batterie connus pour la consommation, qui est la différence des deux). */
 fun wellMeasuredDays(hours: List<EnergyBucket>, zone: TimeZone, measured: (EnergyBucket) -> Boolean): Set<LocalDate> =
     hours.filter(measured).groupingBy { it.start.toLocalDateTime(zone).date }.eachCount().filterValues { it >= MIN_MEASURED_HOURS }.keys
 
@@ -198,7 +198,7 @@ fun loadStats(
         return dates.map { if (it in complete) stats.solarProduction(it, zone).value else null }
     }
     fun consumedKwh(dates: List<LocalDate>, hours: List<EnergyBucket>): List<Double?> {
-        val complete = wellMeasuredDays(hours, zone) { it.batteryNetWh != null }
+        val complete = wellMeasuredDays(hours, zone) { it.producedWh != null && it.batteryNetWh != null }
         return dates.map { if (it in complete) stats.consumption(it, zone, now).value?.div(1000.0) else null }
     }
 

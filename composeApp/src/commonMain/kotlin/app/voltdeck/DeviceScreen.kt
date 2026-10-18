@@ -28,7 +28,9 @@ import app.voltdeck.drivers.victron.VictronLinkStatus
 import app.voltdeck.storage.AggRow
 import app.voltdeck.storage.AggregateReader
 import app.voltdeck.storage.SeriesKey
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
 import kotlin.time.Duration.Companion.hours
@@ -139,7 +141,10 @@ private fun HistoryCard(runtime: VoltdeckRuntime, device: KnownDevice, spec: His
     LaunchedEffect(database, spec, changes, device.deviceId, now) {
         val db = database ?: return@LaunchedEffect
         val window = HistoryWindow(now)
-        loaded = window to AggregateReader(db).series(SeriesKey(device.deviceId, spec.metric), window.from, window.to, window.to, runtime.zone).rows
+        val rows = withContext(Dispatchers.Default) {
+            AggregateReader(db).series(SeriesKey(device.deviceId, spec.metric), window.from, window.to, window.to, runtime.zone).rows
+        }
+        loaded = window to rows
     }
     Card(Modifier.fillMaxWidth()) {
         Txt(spec.title, 17.sp, FontWeight.Bold)

@@ -39,12 +39,16 @@ class LoadStatsTest {
         DeviceStore(db).register(bms, "test", DeviceRole.BATTERY, "bms", "a-bms", null, Instant.parse("2020-01-01T00:00:00Z"))
     }
 
-    private fun collect(day: LocalDate, hours: Int, startHour: Int = 0, watts: Double = 100.0) {
+    private fun collect(day: LocalDate, hours: Int, startHour: Int = 0, watts: Double = 100.0, mpptHours: Int = hours, mpptStartHour: Int = startHour) {
         val aggregator = MinuteAggregator(db)
         var t = day.atStartOfDayIn(zone) + startHour.hours
         val end = t + hours.hours
+        val mpptFrom = day.atStartOfDayIn(zone) + mpptStartHour.hours
+        val mpptTo = mpptFrom + mpptHours.hours
         while (t < end) {
-            aggregator.add(Reading(mppt, t, listOf(Sample(Metric.PV_POWER, 0, watts), Sample(Metric.BATTERY_VOLTAGE, 0, 13.0), Sample(Metric.BATTERY_CURRENT, 0, watts / 13.0))))
+            if (t >= mpptFrom && t < mpptTo) {
+                aggregator.add(Reading(mppt, t, listOf(Sample(Metric.PV_POWER, 0, watts), Sample(Metric.BATTERY_VOLTAGE, 0, 13.0), Sample(Metric.BATTERY_CURRENT, 0, watts / 13.0))))
+            }
             aggregator.add(Reading(bms, t, listOf(Sample(Metric.BATTERY_VOLTAGE, 0, 13.0), Sample(Metric.BATTERY_CURRENT, 0, 2.0))))
             t += 60.seconds
         }
@@ -71,5 +75,13 @@ class LoadStatsTest {
         assertEquals(3, comparison.days)
         assertEquals(ComparisonBasis.COMMON_DAYS, comparison.basis)
         assertEquals(100.0, comparison.percent, 1.0)
+    }
+
+    @Test
+    fun consumptionIsNotComparedWhenTheSourceWasMissedForPartOfTheDay() {
+        // le BMS est lu 24 h, le MPPT seulement 8 h en octobre : la consommation calculée ne couvre que ces 8 h
+        for (d in 1..3) collect(LocalDate(2026, 9, d), hours = 24, watts = 100.0)
+        for (d in 1..3) collect(LocalDate(2026, 10, d), hours = 24, watts = 100.0, mpptHours = 8, mpptStartHour = 8)
+        assertNull(load().consumedComparison, "8 h de sources face à 24 h ne se comparent pas")
     }
 }
