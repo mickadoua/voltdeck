@@ -145,20 +145,21 @@ internal object BackgroundPrefs {
 
     fun lastServiceFailure(context: Context) = read(context, "serviceFailure")
 
-    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt)
+    // commit() et non apply() : l'échec inattendu est relancé aussitôt et le processus meurt, avant la fin d'une écriture asynchrone.
+    fun recordServiceFailure(context: Context, attempt: BootAttempt) = store(context, "serviceFailure", attempt, synchronous = true)
 
     fun lastServiceStart(context: Context) = read(context, "serviceStart")
 
     fun recordServiceStart(context: Context, attempt: BootAttempt) = store(context, "serviceStart", attempt)
 
-    private fun store(context: Context, key: String, attempt: BootAttempt) {
+    private fun store(context: Context, key: String, attempt: BootAttempt, synchronous: Boolean = false) {
         prefs(context).edit()
             .putLong("${key}At", attempt.at.toEpochMilliseconds())
             .putString("${key}Outcome", attempt.outcome.name)
             .putString("${key}Detail", attempt.detail)
             .putInt("${key}BootCount", attempt.bootCount ?: -1)
             .putLong("${key}SinceBoot", attempt.sinceBoot?.inWholeMilliseconds ?: -1)
-            .apply()
+            .let { if (synchronous) it.commit() else it.apply() }
     }
 
     private fun read(context: Context, key: String): BootAttempt? {

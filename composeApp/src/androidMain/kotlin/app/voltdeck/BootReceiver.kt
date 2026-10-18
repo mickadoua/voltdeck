@@ -62,10 +62,14 @@ internal object BootRestart {
             startService()
             record(BootAttempt(now(), BootOutcome.STARTED, bootCount = bootCount()))
         } catch (e: Exception) {
-            record(BootAttempt(now(), BootOutcome.REFUSED, e.javaClass.simpleName, bootCount()))
+            record(BootAttempt(now(), startFailureOutcome(e), e.javaClass.simpleName, bootCount()))
         }
     }
 }
+
+/** Android refuse par une [SecurityException] ou une [IllegalStateException] ; toute autre exception est un bug à signaler. */
+internal fun startFailureOutcome(e: Exception) =
+    if (e is SecurityException || e is IllegalStateException) BootOutcome.REFUSED else BootOutcome.FAILED
 
 internal object ServiceStart {
     /**
@@ -89,13 +93,9 @@ internal object ServiceStart {
             recordStart(attempt(BootOutcome.STARTED))
             true
         } catch (e: Exception) {
-            if (e is SecurityException || e is IllegalStateException) {
-                recordFailure(attempt(BootOutcome.REFUSED, e.javaClass.simpleName))
-                false
-            } else {
-                recordFailure(attempt(BootOutcome.FAILED, e.javaClass.simpleName))
-                throw e
-            }
+            val outcome = startFailureOutcome(e)
+            recordFailure(attempt(outcome, e.javaClass.simpleName))
+            if (outcome == BootOutcome.REFUSED) false else throw e
         }
     }
 }

@@ -119,6 +119,13 @@ class BootPolicyTest {
     }
 
     @Test
+    fun anUnrelatedBugAtBootIsRecordedAsFailedNotAsARefusalByAndroid() {
+        val run = Run(ready, failure = NullPointerException("secret-looking message"))
+        run.on(Intent.ACTION_BOOT_COMPLETED)
+        assertEquals(listOf(BootAttempt(t0, BootOutcome.FAILED, "NullPointerException", 7)), run.recorded)
+    }
+
+    @Test
     fun aSkippedStartIsRecordedWithItsReasonAndDoesNotStartTheService() {
         val run = Run(ready.copy(restartAfterBoot = false))
         run.on(Intent.ACTION_BOOT_COMPLETED)

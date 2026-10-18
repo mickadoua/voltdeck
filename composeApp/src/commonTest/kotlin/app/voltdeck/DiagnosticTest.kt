@@ -126,6 +126,8 @@ class DiagnosticTest {
         assertTrue(serviceFailureUnresolved(refusal(t0, boot = null), start(t0 - 1.hours, boot = 12)))
         assertFalse(serviceFailureUnresolved(refusal(t0 - 1.hours, boot = 12), start(t0, boot = null)))
         assertFalse(serviceFailureUnresolved(refusal(t0 - 1.hours, sinceBoot = null), start(t0, sinceBoot = null)), "même démarrage sans temps écoulé : horloge")
+        assertTrue(serviceFailureUnresolved(refusal(t0, sinceBoot = 30), start(t0 - 1.hours, sinceBoot = null)), "temps écoulé absent d'un seul côté : horloge")
+        assertFalse(serviceFailureUnresolved(refusal(t0 - 1.hours, sinceBoot = null), start(t0, sinceBoot = 10)), "temps écoulé absent d'un seul côté : horloge")
     }
 
     @Test
