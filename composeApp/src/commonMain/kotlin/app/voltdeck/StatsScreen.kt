@@ -1,10 +1,8 @@
 package app.voltdeck
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,14 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -118,8 +109,8 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TotalCard("Production", d.produced, d.previousProduced, p.solar, SunIcon, Modifier.weight(1f))
-            TotalCard("Consommation", d.consumed, d.previousConsumed, p.load, PlugIcon, Modifier.weight(1f))
+            TotalCard("Production", "Prod.", d.produced, d.producedComparison, p.solar, SunIcon, Modifier.weight(1f))
+            TotalCard("Consommation", "Conso.", d.consumed, d.consumedComparison, p.load, PlugIcon, Modifier.weight(1f))
         }
 
         Card(Modifier.fillMaxWidth()) {
@@ -141,7 +132,7 @@ fun StatsScreen(runtime: VoltdeckRuntime) {
             if (d.soc.isEmpty()) {
                 Txt("Aucune mesure de charge sur cette période.", 14.sp, color = p.ink2)
             } else {
-                SocLine(d.soc, d.period.first.atStartOfDayIn(runtime.zone), d.period.endExclusive.atStartOfDayIn(runtime.zone))
+                SocLine(d.soc, d.period.first.atStartOfDayIn(runtime.zone), d.period.kind, runtime.zone)
             }
         }
 
@@ -175,14 +166,21 @@ private fun slotLabel(at: Instant, level: Level, zone: TimeZone): String {
 }
 
 @Composable
-private fun TotalCard(title: String, total: EnergyTotal?, previous: EnergyTotal?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
+private fun TotalCard(title: String, shortTitle: String, total: EnergyTotal?, comparison: Comparison?, color: Color, icon: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit, modifier: Modifier) {
     val p = LocalPalette.current
     Card(modifier, radius = 18.dp, padding = 14.dp) {
-        TileHeader(title, color, icon)
+        TileHeader(title, color, icon, shortTitle)
         Value(total?.let { frDecimal(it.kwh, 2) } ?: DASH, "kWh", 26.sp)
         if (total != null && total.calculated) Tag("calculée")
         total?.coverage?.takeIf { it < 0.99 }?.let { Txt("Couverture ${frDecimal(it * 100, 0)} %", 12.sp, color = p.muted) }
-        variation(total, previous)?.let { Txt("${signedFr(it, 0)} % vs période précédente", 12.sp, FontWeight.SemiBold, p.ink2) }
+        comparison?.let {
+            val against = when (it.basis) {
+                ComparisonBasis.WHOLE -> "la période précédente"
+                ComparisonBasis.FIRST_DAYS -> if (it.days == 1) "le premier jour de la période précédente" else "les ${it.days} premiers jours de la période précédente"
+                ComparisonBasis.COMMON_DAYS -> if (it.days == 1) "le seul jour bien mesuré des deux périodes" else "les ${it.days} jours bien mesurés des deux périodes"
+            }
+            Txt("${signedFr(it.percent, 0)} % vs $against", 12.sp, FontWeight.SemiBold, p.ink2)
+        }
     }
 }
 
@@ -210,59 +208,16 @@ fun niceCeiling(max: Double): Double {
 @Composable
 private fun EnergyBars(slots: List<Instant>, d: StatsData, zone: TimeZone) {
     val p = LocalPalette.current
-    val byStart = remember(d) { d.buckets.associateBy { it.start } }
-    var selected by remember(d) { mutableStateOf<Int?>(null) }
-    val values = slots.map { byStart[it] }
-    val top = niceCeiling(values.maxOfOrNull { b -> maxOf(b?.producedWh ?: 0.0, b?.consumedWh ?: 0.0) } ?: 0.0)
-    val peak = values.withIndex().maxByOrNull { it.value?.producedWh ?: -1.0 }?.takeIf { (it.value?.producedWh ?: 0.0) > 0 }?.index
-
-    val shown = selected
-    Txt(
-        if (shown == null) "Touchez une barre pour lire ses valeurs."
-        else values[shown].let { b -> "${slotLabel(slots[shown], d.level, zone)} : produite ${wh(b?.producedWh)} · consommée ${wh(b?.consumedWh)}" },
-        13.sp, FontWeight.SemiBold, if (shown == null) p.muted else p.ink,
+    val columns = remember(d, slots) { energyColumns(slots, d.buckets) }
+    val peak = columns.producedDrawn.withIndex().maxByOrNull { it.value }?.takeIf { it.value > 0 }?.index
+    Txt("Touchez une colonne pour lire ses valeurs. Pincez pour zoomer, glissez pour défiler.", 13.sp, FontWeight.SemiBold, p.muted)
+    EnergyChart(
+        columns = columns,
+        slotLabel = { slotLabel(slots[it], d.level, zone) },
+        description = "Énergie produite et consommée, ${slots.size} périodes",
+        modifier = Modifier.fillMaxWidth().height(200.dp),
     )
-    Row(Modifier.fillMaxWidth()) {
-        Column(Modifier.height(160.dp).padding(end = 6.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            listOf(1.0, 0.5, 0.0).forEach { Txt(frDecimal(top * it, if (top < 10.0) 1 else 0), 11.sp, color = p.muted) }
-        }
-        Column(Modifier.weight(1f)) {
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .semantics { contentDescription = "Énergie produite et consommée, ${slots.size} périodes" }
-                    .pointerInput(slots.size) {
-                        detectTapGestures { pos -> selected = (pos.x / size.width * slots.size).toInt().coerceIn(0, slots.size - 1) }
-                    },
-            ) {
-                val slotWidth = size.width / slots.size
-                val barWidth = (slotWidth / 2.6f).coerceAtMost(12.dp.toPx())
-                listOf(0.0, 0.5, 1.0).forEach { f ->
-                    val y = size.height * (1 - f.toFloat())
-                    drawLine(p.grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-                }
-                values.forEachIndexed { i, b ->
-                    val center = slotWidth * (i + 0.5f)
-                    if (i == selected) drawRect(p.grid, Offset(slotWidth * i, 0f), Size(slotWidth, size.height))
-                    fun bar(value: Double?, x: Float, color: Color) {
-                        if (value == null || value <= 0) return
-                        val h = (value / top).toFloat() * size.height
-                        drawRoundRect(color, Offset(x, size.height - h), Size(barWidth, h), CornerRadius(2.dp.toPx()))
-                    }
-                    bar(b?.producedWh, center - barWidth - 1.dp.toPx(), p.solar)
-                    bar(b?.consumedWh, center + 1.dp.toPx(), p.load)
-                }
-            }
-            Row(Modifier.fillMaxWidth()) {
-                val step = (slots.size / 4).coerceAtLeast(1)
-                slots.indices.filter { it % step == 0 }.forEach {
-                    Txt(slotLabel(slots[it], d.level, zone), 11.sp, color = p.muted, modifier = Modifier.weight(minOf(step, slots.size - it).toFloat()))
-                }
-            }
-        }
-    }
-    peak?.let { Txt("Pic de production : ${wh(values[it]?.producedWh)} (${slotLabel(slots[it], d.level, zone)})", 12.sp, FontWeight.Bold, p.ink2) }
+    peak?.let { Txt("Pic de production : ${wh(columns.produced[it])} (${slotLabel(slots[it], d.level, zone)})", 12.sp, FontWeight.Bold, p.ink2) }
 }
 
 private fun wh(v: Double?) = v?.let { "${frDecimal(it, 0)} Wh" } ?: DASH
@@ -289,26 +244,30 @@ private fun EnergyTable(slots: List<Instant>, d: StatsData, zone: TimeZone) {
 }
 
 @Composable
-private fun SocLine(rows: List<AggRow>, from: Instant, to: Instant) {
+private fun SocLine(rows: List<AggRow>, from: Instant, kind: PeriodKind, zone: TimeZone) {
     val p = LocalPalette.current
-    val span = (to - from).inWholeSeconds.toFloat().coerceAtLeast(1f)
-    val typical = rows.zipWithNext { a, b -> b.start - a.start }.minOrNull()
-    Canvas(Modifier.fillMaxWidth().height(140.dp).semantics { contentDescription = "Charge de la batterie, de 0 à 100 %" }) {
-        listOf(0f, 0.5f, 1f).forEach { f ->
-            val y = size.height * (1 - f)
-            drawLine(p.grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-        }
-        val path = Path()
-        var previous: AggRow? = null
-        rows.forEach { r ->
-            val x = ((r.start - from).inWholeSeconds / span) * size.width
-            val y = size.height * (1 - (r.stats.mean / 100.0).toFloat().coerceIn(0f, 1f))
-            val gap = previous != null && typical != null && r.start - previous.start > typical * 2
-            if (previous == null || gap) path.moveTo(x, y) else path.lineTo(x, y)
-            previous = r
-        }
-        drawPath(path, p.battery, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
-    }
+    val segments = remember(rows, from) { segmentsOf(rows, from) }
+    SegmentedLineChart(
+        segments = segments,
+        color = p.battery,
+        unit = "%",
+        decimals = 0,
+        labelEveryMinutes = if (kind == PeriodKind.DAY) 180 else 24 * 60,
+        xLabel = { minutes ->
+            val t = instantAt(from, minutes).toLocalDateTime(zone)
+            if (kind == PeriodKind.DAY) "${t.hour} h" else "${t.date.day}/${t.date.month.ordinal + 1}"
+        },
+        tickLabel = { minutes ->
+            if (kind == PeriodKind.DAY) {
+                "${instantAt(from, minutes).toLocalDateTime(zone).hour} h"
+            } else {
+                dayTick(from, minutes, zone).let { "${it.day}/${it.month.ordinal + 1}" }
+            }
+        },
+        description = "Charge de la batterie, de 0 à 100 %",
+        modifier = Modifier.fillMaxWidth().height(180.dp),
+        fixedY = 0.0..100.0,
+    )
 }
 
 @Composable

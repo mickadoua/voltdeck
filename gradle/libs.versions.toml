@@ -7,6 +7,13 @@ sqldelight = "2.4.1"
 coroutines = "1.11.0"
 datetime = "0.7.1"
 activity-compose = "1.13.0"
+# 3.1.x est la dernière lignée de Vico bâtie sur Compose Multiplatform 1.10 ; 3.2+ exige Compose 1.11.
+vico = "3.1.0"
+
+# Outils de test uniquement (tests de composables sous Robolectric) : rien de tout cela n'entre dans l'APK.
+robolectric = "4.14.1"
+compose-ui-test = "1.10.5"
+junit = "4.13.2"
 
 android-compileSdk = "36"
 android-targetSdk = "36"
@@ -24,6 +31,10 @@ sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sq
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
+vico-compose = { module = "com.patrykandpatrick.vico:compose", version.ref = "vico" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "compose-ui-test" }
+junit = { module = "junit:junit", version.ref = "junit" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
 
 [plugins]

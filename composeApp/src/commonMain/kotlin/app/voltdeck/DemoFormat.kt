@@ -44,7 +44,7 @@ fun sampleLabel(sample: Sample): String = when (sample.metric) {
     Metric.CELL_VOLTAGE -> "Cellule ${sample.channel + 1}"
     Metric.DEVICE_STATE -> "État"
     Metric.ERROR_CODE -> "Erreur"
-    Metric.LOAD_CURRENT -> "Courant de charge"
+    Metric.LOAD_CURRENT -> "Courant de la sortie load"
     Metric.TIME_TO_GO -> "Autonomie restante"
     Metric.CONSUMED_AH -> "Ah consommés"
     Metric.INPUT_VOLTAGE -> "Tension d'entrée"

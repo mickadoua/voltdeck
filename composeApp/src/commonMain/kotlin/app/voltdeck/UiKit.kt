@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +45,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -57,13 +61,65 @@ fun Txt(
     color: Color = LocalPalette.current.ink,
     modifier: Modifier = Modifier,
     align: TextAlign? = null,
+    oneLine: Boolean = false,
+    shortText: String? = null,
 ) {
-    BasicText(
-        text,
-        modifier = modifier,
-        style = TextStyle(color = color, fontSize = size, fontWeight = weight, fontFeatureSettings = TABULAR, textAlign = align ?: TextAlign.Unspecified),
-    )
+    val style = TextStyle(color = color, fontSize = size, fontWeight = weight, fontFeatureSettings = TABULAR, textAlign = align ?: TextAlign.Unspecified)
+    if (oneLine) {
+        var fit by remember(text, size) { mutableStateOf(OneLineFit()) }
+        val widest = remember(text, size) { intArrayOf(0) }
+        val abbreviated = fit.abbreviated && shortText != null
+        BasicText(
+            if (abbreviated) checkNotNull(shortText) else text,
+            modifier = if (abbreviated) modifier.semantics { contentDescription = text } else modifier,
+            style = style.copy(fontSize = size * fit.shrink),
+            maxLines = 1,
+            softWrap = false,
+            onTextLayout = {
+                val available = it.layoutInput.constraints.maxWidth
+                if (widest[0] != 0 && available > widest[0]) {
+                    widest[0] = available
+                    fit = OneLineFit()
+                } else {
+                    widest[0] = maxOf(widest[0], available)
+                    val overflow = it.didOverflowWidth || oneLineOverflows(it.multiParagraph.maxIntrinsicWidth, available)
+                    fit = nextOneLineFit(fit, overflow, size.value, shortText != null)
+                }
+            },
+        )
+    } else {
+        BasicText(text, modifier = modifier, style = style)
+    }
 }
+
+/** État d'ajustement d'un libellé [Txt] `oneLine` : facteur de réduction, puis repli sur la forme abrégée. */
+data class OneLineFit(val shrink: Float = 1f, val abbreviated: Boolean = false)
+
+/**
+ * Étape suivante quand un libellé ne tient pas : on le réduit jusqu'à [MIN_ONE_LINE_SP] ; en dessous, on passe à la
+ * forme abrégée (si elle existe) à taille normale, qu'on réduit à son tour. Jamais de mot coupé.
+ */
+fun nextOneLineFit(fit: OneLineFit, overflow: Boolean, sizeSp: Float, hasShort: Boolean): OneLineFit {
+    if (!overflow) return fit
+    if (sizeSp * fit.shrink * ONE_LINE_STEP >= MIN_ONE_LINE_SP) return fit.copy(shrink = fit.shrink * ONE_LINE_STEP)
+    if (hasShort && !fit.abbreviated) return OneLineFit(shrink = 1f, abbreviated = true)
+    return fit
+}
+
+/**
+ * Sans retour à la ligne, la mise en page du paragraphe prend sa propre largeur intrinsèque : c'est donc la largeur
+ * *disponible* (contrainte du parent) qu'il faut comparer, jamais celle du paragraphe. Une contrainte infinie ne déborde pas.
+ */
+fun oneLineOverflows(intrinsicWidth: Float, availableWidth: Int): Boolean =
+    availableWidth != Constraints.Infinity && intrinsicWidth > availableWidth * ONE_LINE_MARGIN
+
+private const val ONE_LINE_STEP = 0.92f
+
+/** Un libellé qui occupe plus de 97 % de la largeur disponible est réduit : le dernier glyphe est sinon rogné. */
+private const val ONE_LINE_MARGIN = 0.97f
+
+/** Plancher de réduction (sp, avant échelle de police) : en dessous, le texte est illisible, on abrège. */
+const val MIN_ONE_LINE_SP = 8f
 
 /** Un chiffre et son unité, l'unité en petit et en `ink2` (VOL-2 §3). */
 @Composable
@@ -173,10 +229,10 @@ fun Badge(color: Color, icon: DrawScope.(Color) -> Unit) {
 }
 
 @Composable
-fun TileHeader(label: String, color: Color, icon: DrawScope.(Color) -> Unit, trailing: @Composable () -> Unit = {}) {
+fun TileHeader(label: String, color: Color, icon: DrawScope.(Color) -> Unit, shortLabel: String? = null, trailing: @Composable () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Badge(color, icon)
-        Txt(label, 15.sp, FontWeight.Bold, modifier = Modifier.weight(1f))
+        Txt(label, 15.sp, FontWeight.Bold, modifier = Modifier.weight(1f), oneLine = true, shortText = shortLabel)
         trailing()
     }
 }
