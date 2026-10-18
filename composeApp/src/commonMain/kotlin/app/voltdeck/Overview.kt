@@ -70,9 +70,12 @@ data class Overview(
     val loads: List<CircuitTile>,
 )
 
-/** « 3 cycles » pour un compteur de BMS ; une estimation garde une décimale sous 10 cycles (« 0,4 cycles »), sinon un cycle équivalent d'écart n'a plus de sens. */
+/**
+ * « 3 cycles » pour un compteur de BMS. Une estimation est un minimum (les trous d'enregistrement sous-comptent les Ah déchargés) :
+ * « au moins 0,4 cycles », avec une décimale sous 10 cycles, sinon un cycle équivalent d'écart n'a plus de sens.
+ */
 fun cyclesLabel(cycles: Double, estimated: Boolean): String =
-    "${frDecimal(cycles, if (estimated && cycles < 10.0) 1 else 0)} cycles"
+    if (estimated) "au moins ${frDecimal(cycles, if (cycles < 10.0) 1 else 0)} cycles" else "${frDecimal(cycles, 0)} cycles"
 
 /** Capacité nominale saisie sur le shunt placé sur le négatif de la batterie, `null` si aucune. */
 fun nominalCapacityAh(devices: List<KnownDevice>, setupOf: (DeviceId) -> ShuntSetup): Double? =

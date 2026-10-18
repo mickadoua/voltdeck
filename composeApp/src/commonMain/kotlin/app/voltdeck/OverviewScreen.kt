@@ -160,13 +160,22 @@ private fun BatteryCard(o: Overview, modifier: Modifier) {
                     else -> Txt("Autonomie : $DASH", 13.sp, color = p.ink2)
                 }
             }
-            val detail = listOfNotNull(
-                if (b.cellMin != null && b.cellMax != null) "Cellules ${frDecimal(b.cellMin, 2)}–${frDecimal(b.cellMax, 2)} V" else null,
-                b.cycles?.let { "${frDecimal(it, 0)} cycles" },
-            )
-            if (detail.isNotEmpty()) Txt(detail.joinToString(" · "), 13.sp, color = p.ink2)
+            BatteryDetailLine(b)
         }
         Txt(if (b.source == BatterySource.SHUNT) "Mesure : shunt de batterie" else "Mesure : BMS de la batterie", 12.sp, color = p.muted)
+    }
+}
+
+/** Cellules et cycles ; des cycles estimés sur le shunt portent l'étiquette « estimé » pour ne pas passer pour un compteur de BMS. */
+@Composable
+internal fun BatteryDetailLine(b: BatteryTile) {
+    val p = LocalPalette.current
+    val cells = if (b.cellMin != null && b.cellMax != null) "Cellules ${frDecimal(b.cellMin, 2)}–${frDecimal(b.cellMax, 2)} V" else null
+    val cycles = b.cycles?.let { cyclesLabel(it, b.cyclesEstimated) }
+    if (cells == null && cycles == null) return
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Txt(listOfNotNull(cells, cycles).joinToString(" · "), 13.sp, color = p.ink2)
+        if (cycles != null && b.cyclesEstimated) Tag("estimé")
     }
 }
 

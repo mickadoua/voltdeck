@@ -168,9 +168,9 @@ class OverviewTest {
 
     @Test
     fun anEstimateKeepsOneDecimalUnderTenCycles() {
-        assertEquals("0,4 cycles", cyclesLabel(0.4, estimated = true))
+        assertEquals("au moins 0,4 cycles", cyclesLabel(0.4, estimated = true))
         assertEquals("37 cycles", cyclesLabel(37.0, estimated = false))
-        assertEquals("12 cycles", cyclesLabel(12.3, estimated = true))
+        assertEquals("au moins 12 cycles", cyclesLabel(12.3, estimated = true))
         assertEquals("5 cycles", cyclesLabel(5.0, estimated = false))
     }
 }
