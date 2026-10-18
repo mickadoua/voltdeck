@@ -131,4 +131,46 @@ class OverviewTest {
         val charging = buildOverview(listOf(bms), mapOf(bmsReading), setups(), estimatedAutonomyHours = 20.5)
         assertEquals(AutonomyGap.CHARGING, charging.autonomy.gap)
     }
+
+    private val capacitySetup = ShuntSetup(ShuntPlacement.BATTERY, capacityAh = 200.0)
+
+    @Test
+    fun aShuntOnlyBatteryShowsEstimatedCyclesOnceACapacityIsEntered() {
+        val reading = reading(shunt, Metric.BATTERY_VOLTAGE to 12.8, Metric.BATTERY_CURRENT to -3.0, Metric.SOC to 80.0)
+        val o = buildOverview(listOf(shunt), mapOf(reading), setups(shunt to capacitySetup), estimatedCycles = 2.4)
+        assertEquals(2.4, o.battery!!.cycles)
+        assertTrue(o.battery!!.cyclesEstimated)
+    }
+
+    @Test
+    fun withoutCapacityNoCyclesAreShown() {
+        val reading = reading(shunt, Metric.BATTERY_VOLTAGE to 12.8, Metric.BATTERY_CURRENT to -3.0, Metric.SOC to 80.0)
+        assertNull(nominalCapacityAh(listOf(shunt), setups()))
+        val o = buildOverview(listOf(shunt), mapOf(reading), setups(), estimatedCycles = null)
+        assertNull(o.battery!!.cycles)
+        assertFalse(o.battery!!.cyclesEstimated)
+    }
+
+    @Test
+    fun theBmsCounterHasPriorityOverTheEstimate() {
+        val shuntReading = reading(shunt, Metric.BATTERY_VOLTAGE to 12.8, Metric.BATTERY_CURRENT to -3.0, Metric.SOC to 80.0)
+        val o = buildOverview(listOf(bms, shunt), mapOf(bmsReading, shuntReading), setups(shunt to capacitySetup), estimatedCycles = 2.4)
+        assertEquals(37.0, o.battery!!.cycles)
+        assertFalse(o.battery!!.cyclesEstimated)
+    }
+
+    @Test
+    fun theCapacityComesFromTheShuntOnTheBatteryNegativeOnly() {
+        assertEquals(200.0, nominalCapacityAh(listOf(shunt), setups(shunt to capacitySetup)))
+        assertNull(nominalCapacityAh(listOf(bms), setups()))
+        assertNull(nominalCapacityAh(listOf(shunt), setups(shunt to ShuntSetup(ShuntPlacement.LOAD, Circuit.FRIDGE))))
+    }
+
+    @Test
+    fun anEstimateKeepsOneDecimalUnderTenCycles() {
+        assertEquals("0,4 cycles", cyclesLabel(0.4, estimated = true))
+        assertEquals("37 cycles", cyclesLabel(37.0, estimated = false))
+        assertEquals("12 cycles", cyclesLabel(12.3, estimated = true))
+        assertEquals("5 cycles", cyclesLabel(5.0, estimated = false))
+    }
 }

@@ -34,6 +34,8 @@ data class BatteryTile(
     val nominalAh: Double?,
     val cycles: Double?,
     val source: BatterySource,
+    /** [cycles] vient du flux du shunt et de la capacité saisie, pas d'un compteur de BMS. */
+    val cyclesEstimated: Boolean = false,
 ) {
     val powerW: Double? get() = if (voltage != null && current != null) voltage * current else null
 
@@ -68,12 +70,22 @@ data class Overview(
     val loads: List<CircuitTile>,
 )
 
+/** « 3 cycles » pour un compteur de BMS ; une estimation garde une décimale sous 10 cycles (« 0,4 cycles »), sinon un cycle équivalent d'écart n'a plus de sens. */
+fun cyclesLabel(cycles: Double, estimated: Boolean): String =
+    "${frDecimal(cycles, if (estimated && cycles < 10.0) 1 else 0)} cycles"
+
+/** Capacité nominale saisie sur le shunt placé sur le négatif de la batterie, `null` si aucune. */
+fun nominalCapacityAh(devices: List<KnownDevice>, setupOf: (DeviceId) -> ShuntSetup): Double? =
+    devices.filter { it.role == DeviceRole.SHUNT }.map { setupOf(it.deviceId) }.firstOrNull { it.placement == ShuntPlacement.BATTERY && it.capacityAh != null }?.capacityAh
+
 fun buildOverview(
     devices: List<KnownDevice>,
     latest: Map<DeviceId, Reading>,
     setupOf: (DeviceId) -> ShuntSetup,
     /** Estimation de [app.voltdeck.storage.SystemStats.autonomy] quand elle est de nature « estimée ». */
     estimatedAutonomyHours: Double? = null,
+    /** Estimation de [app.voltdeck.storage.SystemStats.cycles] quand elle est de nature « estimée » ; absente sans capacité saisie. */
+    estimatedCycles: Double? = null,
 ): Overview {
     fun Reading.value(metric: Metric, channel: Int = 0) = samples.firstOrNull { it.metric == metric && it.channel == channel }?.value
     fun Reading.values(metric: Metric) = samples.filter { it.metric == metric }.map { it.value }
@@ -101,6 +113,7 @@ fun buildOverview(
     val battery = if (bms == null && batteryShunt == null) null else {
         val primary = batteryShunt ?: bms!!
         val cells = bms?.values(Metric.CELL_VOLTAGE).orEmpty()
+        val bmsCycles = bms?.value(Metric.CYCLES)
         BatteryTile(
             soc = primary.value(Metric.SOC) ?: bms?.value(Metric.SOC),
             voltage = primary.value(Metric.BATTERY_VOLTAGE) ?: bms?.value(Metric.BATTERY_VOLTAGE),
@@ -110,8 +123,9 @@ fun buildOverview(
             cellMax = cells.maxOrNull(),
             remainingAh = bms?.value(Metric.REMAINING_CAPACITY),
             nominalAh = bms?.value(Metric.NOMINAL_CAPACITY),
-            cycles = bms?.value(Metric.CYCLES),
+            cycles = bmsCycles ?: estimatedCycles,
             source = if (batteryShunt != null) BatterySource.SHUNT else BatterySource.BMS,
+            cyclesEstimated = bmsCycles == null && estimatedCycles != null,
         )
     }
 
