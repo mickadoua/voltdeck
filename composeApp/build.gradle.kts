@@ -54,8 +54,8 @@ android {
         applicationId = "app.voltdeck"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     // Clé de publication fournie par la CI (secrets du dépôt) : sans elle, l'APK release reste non signé.
     val releaseKeystore = System.getenv("VOLTDECK_KEYSTORE_FILE")
