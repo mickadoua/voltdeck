@@ -15,7 +15,13 @@ Le dépôt est **public**. Tout ce qui y entre est lu par n'importe qui : code, 
 - Branches `type/sujet` (`feat/vue-annee`, `fix/tests-ios-storage`), jamais de travail direct sur `main`.
 - Messages en français, à l'impératif, titre sous 72 caractères ; le corps dit pourquoi, pas comment.
 - PR : ce qui change et pourquoi, ce qui a été vérifié, ce qui reste. Pas de tiret cadratin.
-- Avant de pousser : `./gradlew check` et les trois scripts de `scripts/ci/`.
+
+## Tester en local, puis pousser
+
+- Chaque modification est testée en local avant d'être poussée : `./gradlew check` et les trois scripts de `scripts/ci/`. Si le code partagé ou iOS change, `./gradlew iosSimulatorArm64Test` sur un Mac ; sans Mac, la PR l'écrit (« tests iOS non lancés »).
+- La PR liste les commandes lancées et leur résultat. Elle n'attend pas la CI pour être fusionnée.
+- La CI automatique ne lance que les contrôles rapides (`scripts/ci/`). S'ils sont rouges, c'est un vrai défaut (écriture BLE, secret) : on corrige avant de fusionner.
+- Tests Android et iOS en CI : à la demande seulement (Actions > CI > Run workflow, case « ios » pour le simulateur iOS).
 
 ## Lecture seule
 
