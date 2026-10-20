@@ -15,6 +15,7 @@ Le dépôt est **public**. Tout ce qui y entre est lu par n'importe qui : code, 
 - Branches `type/sujet` (`feat/vue-annee`, `fix/tests-ios-storage`), jamais de travail direct sur `main`.
 - Messages en français, à l'impératif, titre sous 72 caractères ; le corps dit pourquoi, pas comment.
 - PR : ce qui change et pourquoi, ce qui a été vérifié, ce qui reste. Pas de tiret cadratin.
+- **Email d'auteur des mainteneurs** : chaque commit d'un mainteneur porte l'adresse `3759537+mickadoua@users.noreply.github.com`, adresse noreply du compte propriétaire du dépôt (la forme sans identifiant `mickadoua@users.noreply.github.com`, celle des commits de fusion, est rattachée au même compte). Le nom d'auteur reste libre. À régler une fois par clone, avant le premier commit : `git config user.email 3759537+mickadoua@users.noreply.github.com`, puis vérifier avec `git log -1 --format=%ae`. Raison : les services branchés sur le dépôt rattachent un commit au compte propriétaire par cet email, et un commit d'un autre auteur peut ne pas déclencher leur build. Les contributeurs extérieurs gardent leur propre adresse.
 
 ## Tester en local, puis pousser
 
