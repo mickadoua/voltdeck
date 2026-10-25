@@ -21,7 +21,8 @@ Le dépôt est **public**. Tout ce qui y entre est lu par n'importe qui : code, 
 
 - Chaque modification est testée en local avant d'être poussée : `./gradlew check` et les trois scripts de `scripts/ci/`. Si le code partagé ou iOS change, `./gradlew iosSimulatorArm64Test` sur un Mac ; sans Mac, la PR l'écrit (« tests iOS non lancés »).
 - La PR liste les commandes lancées et leur résultat. Elle n'attend pas la CI pour être fusionnée.
-- La CI automatique ne lance que les contrôles rapides (`scripts/ci/`). S'ils sont rouges, c'est un vrai défaut (écriture BLE, secret) : on corrige avant de fusionner.
+- La CI automatique ne lance que les contrôles rapides (`scripts/ci/`), et seulement sur une PR prête : pas sur un push de branche, pas sur une PR en brouillon, pas sur une PR qui ne touche que la doc (`*.md`, `docs/`, `LICENSE`, `NOTICE`). Les trois scripts restent donc obligatoires en local, doc comprise : une adresse MAC dans un `.md` n'est vue que par eux. S'ils sont rouges, c'est un vrai défaut (écriture BLE, secret) : on corrige avant de fusionner.
+- Un nouveau push sur la même PR annule le run en cours.
 - Tests Android et iOS en CI : à la demande seulement (Actions > CI > Run workflow, case « ios » pour le simulateur iOS).
 
 ## Fusionner une PR

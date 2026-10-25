@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+# Groupe par tag : deux versions différentes ne s'annulent jamais ; un tag repoussé annule son run précédent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Publie l'APK signé sous un nom fixe : releases/latest/download/voltdeck.apk reste valable d'une version à l'autre.
   apk:
