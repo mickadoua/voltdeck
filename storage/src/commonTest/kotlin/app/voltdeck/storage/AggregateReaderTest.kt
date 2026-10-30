@@ -2,6 +2,7 @@ package app.voltdeck.storage
 
 import app.voltdeck.core.DeviceRole
 import app.voltdeck.core.Metric
+import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -9,6 +10,9 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
+
+private val AUCKLAND = TimeZone.of("Pacific/Auckland")
 
 class AggregateReaderTest {
     private val now = EPOCH_2026 + 400.days
@@ -82,6 +86,24 @@ class AggregateReaderTest {
     @Test
     fun latestIsNullForASeriesThatNeverReceivedAnything() {
         assertNull(AggregateReader(db).latest(key, UTC))
+    }
+
+    @Test
+    fun eachStoredDayStartsInItsOwnTimeZone() {
+        db.dayQueries.upsertDay(BMS.value, Metric.SOC.name, 0, "2026-03-10", "Pacific/Auckland", 1, 1.0, 1.0, 1.0, 1.0)
+        db.dayQueries.upsertDay(BMS.value, Metric.SOC.name, 0, "2026-03-11", "UTC", 1, 1.0, 1.0, 1.0, 1.0)
+        val rows = AggregateReader(db).stored(Level.DAY, key, EPOCH_2026 - 2.days, EPOCH_2026 + 3.days, UTC)
+        // Auckland est à UTC+13 en mars (heure d'été) : son 10 mars commence le 9 à 11 h UTC.
+        assertEquals(listOf(Instant.parse("2026-03-09T11:00:00Z"), Instant.parse("2026-03-11T00:00:00Z")), rows.map { it.start })
+        assertEquals(Instant.parse("2026-03-11T00:00:00Z"), AggregateReader(db).latest(key, AUCKLAND)?.start)
+    }
+
+    @Test
+    fun anUnknownStoredTimeZoneFallsBackToTheReadingZone() {
+        db.dayQueries.upsertDay(BMS.value, Metric.SOC.name, 0, "2026-03-10", "Pas/UnFuseau", 1, 1.0, 1.0, 1.0, 1.0)
+        val rows = AggregateReader(db).stored(Level.DAY, key, EPOCH_2026 - 2.days, EPOCH_2026 + 3.days, AUCKLAND)
+        assertEquals(listOf(Instant.parse("2026-03-09T11:00:00Z")), rows.map { it.start })
+        assertEquals(Instant.parse("2026-03-09T11:00:00Z"), AggregateReader(db).latest(key, AUCKLAND)?.start)
     }
 
     @Test
