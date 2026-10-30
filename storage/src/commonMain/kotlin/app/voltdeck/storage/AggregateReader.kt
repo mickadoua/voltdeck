@@ -101,7 +101,7 @@ class AggregateReader(private val database: VoltdeckDatabase) {
             return AggRow(instantOf(it.bucket_start), AggStats(it.count, it.min, it.max, it.sum, it.last))
         }
         database.dayQueries.selectLatestDay(device, metric, channel).executeAsOneOrNull()?.let {
-            return AggRow(LocalDate.parse(it.day).start(zoneResolver(zone)(it.tz_id)), AggStats(it.count, it.min, it.max, it.sum, it.last))
+            return AggRow(LocalDate.parse(it.day).start(zoneOf(it.tz_id, zone)), AggStats(it.count, it.min, it.max, it.sum, it.last))
         }
         return null
     }
@@ -130,16 +130,16 @@ class AggregateReader(private val database: VoltdeckDatabase) {
     /** Résout les fuseaux enregistrés une seule fois par lecture : `TimeZone.of` coûte ~1 ms par appel sur iOS (VOL-27). */
     private fun zoneResolver(fallback: TimeZone): (String) -> TimeZone {
         val resolved = HashMap<String, TimeZone>()
-        return { id ->
-            resolved.getOrPut(id) {
-                try {
-                    TimeZone.of(id)
-                } catch (_: Exception) {
-                    fallback
-                }
-            }
-        }
+        return { id -> resolved.getOrPut(id) { zoneOf(id, fallback) } }
     }
+
+    /** Fuseau enregistré avec une ligne, ou [fallback] s'il n'est pas reconnu sur ce téléphone. */
+    private fun zoneOf(id: String, fallback: TimeZone): TimeZone =
+        try {
+            TimeZone.of(id)
+        } catch (_: Exception) {
+            fallback
+        }
 }
 
 /**

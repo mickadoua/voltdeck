@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.nanoseconds
 
 import kotlin.time.Instant
 
@@ -70,8 +71,11 @@ class TwoYearsHistoryTest {
         val key = SeriesKey(BMS, Metric.BATTERY_VOLTAGE)
 
         val (yearMs, yearPoints) = timed { reader.series(key, now - 365.days, now, now, zone).rows.size }
+        // Mêmes bornes que stored(DAY) sur un an, pour que la comparaison mesure le seul coût du mapping.
+        val yearFirstDay = (now - 365.days).localDate(zone).toString()
+        val yearEndDay = (now - 1.nanoseconds).localDate(zone).nextDay().toString()
         val (yearSqlMs, yearSqlRows) = timed { reader.stored(Level.DAY, key, now - 365.days, now, zone).size }
-        val (rawSqlMs, rawSqlRows) = timed { db.dayQueries.selectDay(BMS.value, key.metric.name, 0, "2025-01-01", "2027-01-01").executeAsList().size }
+        val (rawSqlMs, rawSqlRows) = timed { db.dayQueries.selectDay(BMS.value, key.metric.name, 0, yearFirstDay, yearEndDay).executeAsList().size }
         val (energyMs, energyPoints) = timed { reader.series(SeriesKey(MPPT, Metric.PV_ENERGY_WH), now - 365.days, now, now, zone).rows.size }
         val (twoYearsMs, twoYearsPoints) = timed { reader.series(key, now - 730.days, now, now, zone).rows.size }
         val (stackMs, stackPoints) = timed { metrics.sumOf { reader.series(SeriesKey(SHUNT, it), now - 365.days, now, now, zone).rows.size } }
