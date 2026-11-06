@@ -14,3 +14,7 @@ DerivedData/
 
 # Réglages locaux des outils d'agent : jamais dans le dépôt
 .claude/
+
+# Livrables Play
+*.aab
+*.apks
