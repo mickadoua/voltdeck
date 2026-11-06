@@ -49,6 +49,6 @@ La mesure de ces tailles dans un vrai rendu Vico (Robolectric) s'est révélée 
 ## Procédure 60 i/s sur téléphone
 
 1. Installer le build de la PR, mode **Démo**. L'historique de démo ne couvre que 60 jours (`DEMO_HISTORY_DAYS`) : `two_years_history` est un jeu de test JVM, pas un scénario de l'application. La vue Année montre donc 2–3 mois, ce qui suffit pour juger la fluidité du zoom et du défilement, mais pas le temps d'ouverture sur deux ans (mesuré seulement sur JVM ci-dessus).
-2. Onglet Statistiques → **Année** → remettre les compteurs à zéro (`adb shell dumpsys gfxinfo app.voltdeck reset`), ouvrir l'onglet et chronométrer l'apparition du graphique (enregistrement d'écran, lecture image par image).
-3. Zoomer à deux doigts puis faire défiler le graphique pendant ~10 s, puis relever `dumpsys gfxinfo app.voltdeck` : *Janky frames* et percentiles 90/95/99 (un percentile 95 sous 16,6 ms vaut 60 i/s).
+2. Onglet Statistiques → **Année** → remettre les compteurs à zéro (`adb shell dumpsys gfxinfo tech.dmconsulting.voltdeck reset`), ouvrir l'onglet et chronométrer l'apparition du graphique (enregistrement d'écran, lecture image par image).
+3. Zoomer à deux doigts puis faire défiler le graphique pendant ~10 s, puis relever `dumpsys gfxinfo tech.dmconsulting.voltdeck` : *Janky frames* et percentiles 90/95/99 (un percentile 95 sous 16,6 ms vaut 60 i/s).
 4. Noter modèle du téléphone, version Android, build, et les chiffres.

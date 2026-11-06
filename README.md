@@ -74,6 +74,21 @@ Local SQLDelight storage: aggregates per minute (30 days), hour, day and month, 
 
 The signed Android APK is attached to each [release](https://github.com/mickadoua/voltdeck/releases/latest): download `voltdeck.apk`, open it and allow installs from that source when Android asks. The app is not on the Play Store.
 
+## Publishing on Google Play (maintainers)
+
+Play takes a signed Android App Bundle. Two signing keys exist and must not be mixed up: the **upload key** (`UPLOAD_*`, used for the `.aab`, Play re-signs what it distributes) and the key of the off-store APK (`VOLTDECK_KEYSTORE_*`, used by `release.yml`). With the four `UPLOAD_*` variables set, `release` is signed with the upload key; without them it falls back to `VOLTDECK_KEYSTORE_*`, then to unsigned. A partial set fails the build.
+
+```bash
+export UPLOAD_KEYSTORE_PATH=/tmp/upload.p12 UPLOAD_KEYSTORE_PASSWORD=... UPLOAD_KEY_ALIAS=... UPLOAD_KEY_PASSWORD=...
+./gradlew :composeApp:bundleRelease   # composeApp/build/outputs/bundle/release/composeApp-release.aab
+```
+
+`versionCode` is the number of commits of `HEAD` (full clone required: release tasks refuse a shallow clone); `VERSION_CODE` and `VERSION_NAME` override. The first bundle, uploaded by hand in the Play Console, uses `VERSION_CODE=1`.
+
+Package id and channels. The application id is `tech.dmconsulting.voltdeck` (the Kotlin `namespace` stays `app.voltdeck`). Off-store APKs from `release.yml` use it too, so the v0.2.0 APK (`app.voltdeck`) is a different app to Android: no update, and its local data does not follow. Play App Signing uses a key managed by Google, so the store app and the GitHub APK have the same id but different signatures: a phone has the store app **or** the GitHub APK, not both. Switching channel means uninstalling and loses the local history. Without the four `UPLOAD_*` variables, `bundleRelease` and every `publish*` task fail; `assembleRelease` keeps the `VOLTDECK_KEYSTORE_*` fallback. `--listing` also requires `MICKA_APPROVED_ISSUE` (the store listing is public), and `play-publish.sh` only publishes a commit that is on `origin/main`.
+
+`scripts/play-publish.sh` builds and uploads with [Gradle Play Publisher](https://github.com/Triple-T/gradle-play-publisher) (internal track by default, as a draft; `alpha` for closed testing). `beta` and `production` are refused unless `MICKA_APPROVED_ISSUE=<ID>` names the task holding the written approval. Secrets come from the environment (`VOLTDECK_UPLOAD_KEYSTORE_B64`, `VOLTDECK_UPLOAD_KEYSTORE_PASSWORD`, `VOLTDECK_UPLOAD_KEY_ALIAS`, `VOLTDECK_UPLOAD_KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`) and are never printed. Release notes and the store listing live in `composeApp/src/main/play/` (this is the folder Gradle Play Publisher reads with the Kotlin Multiplatform layout; `src/androidMain/play` is ignored). Without `PLAY_SERVICE_ACCOUNT_FILE`, the plugin is off: an ordinary build never calls Play.
+
 ## Build
 
 Requirements: JDK 21, Android SDK (platform 36). For iOS: a Mac with Xcode.
