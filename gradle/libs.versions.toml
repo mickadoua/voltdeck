@@ -10,6 +10,9 @@ activity-compose = "1.13.0"
 # 3.1.x est la dernière lignée de Vico bâtie sur Compose Multiplatform 1.10 ; 3.2+ exige Compose 1.11.
 vico = "3.1.0"
 
+# Publication sur Play depuis le NAS (VOL-61) : outil de build, absent de l'APK.
+play-publisher = "3.13.0"
+
 # Outils de test uniquement (tests de composables sous Robolectric) : rien de tout cela n'entre dans l'APK.
 robolectric = "4.14.1"
 compose-ui-test = "1.10.5"
@@ -44,3 +47,4 @@ androidApplication = { id = "com.android.application", version.ref = "agp" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+play-publisher = { id = "com.github.triplet.play", version.ref = "play-publisher" }
