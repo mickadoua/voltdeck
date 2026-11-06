@@ -96,7 +96,7 @@ android {
     namespace = "app.voltdeck"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
-        applicationId = "app.voltdeck"
+        applicationId = "tech.dmconsulting.voltdeck"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = appVersionCode
