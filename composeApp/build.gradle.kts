@@ -98,11 +98,9 @@ if (uploadKeyMissing.isNotEmpty() && uploadKeyMissing.size < uploadKeyEnv.size) 
 // l'AAB avec la clé des APK hors store, que Play enregistrerait comme clé d'envoi.
 tasks.matching { it.name == "bundleRelease" || it.name == "signReleaseBundle" || it.name.startsWith("publish") }
     .configureEach {
-        doFirst {
-            if (uploadKeyMissing.isNotEmpty()) {
-                throw GradleException("$name exige la clé d'envoi : il manque $uploadKeyMissing")
-            }
-        }
+        // Valeur locale (pas la propriété du script) : le cache de configuration la sérialise.
+        val refus = uploadKeyMissing.takeIf { it.isNotEmpty() }?.let { "$name exige la clé d'envoi : il manque $it" }
+        doFirst { refus?.let { throw GradleException(it) } }
     }
 
 // Clé du compte de service Play, en chemin de fichier (scripts/play-publish.sh l'écrit dans un
