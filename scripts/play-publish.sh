@@ -8,7 +8,8 @@
 #   tâche qui porte l'accord écrit de Micka pour cette version.
 #   --release-status : draft par défaut (Play ne prend que des brouillons tant que l'app n'est
 #   pas publiée).
-#   --listing : publie aussi la fiche du store (composeApp/src/main/play).
+#   --listing : publie aussi la fiche du store (composeApp/src/main/play) ; public, donc
+#   MICKA_APPROVED_ISSUE=<ID> exigé aussi.
 #
 # Secrets lus dans l'environnement (secrets Paperclip), jamais affichés :
 #   <PREFIXE>_UPLOAD_KEYSTORE_B64, <PREFIXE>_UPLOAD_KEYSTORE_PASSWORD, <PREFIXE>_UPLOAD_KEY_ALIAS,
@@ -40,6 +41,12 @@ if [ "$TRACK" = beta ] || [ "$TRACK" = production ]; then
     echo "play-publish: piste $TRACK, accord sur $MICKA_APPROVED_ISSUE"
 fi
 
+# La fiche du store est publique, quelle que soit la piste.
+if [ "$LISTING" = 1 ]; then
+    [[ ${MICKA_APPROVED_ISSUE:-} =~ ^[A-Z]+-[0-9]+$ ]] ||
+        die 3 "--listing est public : MICKA_APPROVED_ISSUE=<ID>, la tâche avec l'accord écrit de Micka"
+fi
+
 P=${PLAY_SECRET_PREFIX:-$APP_SECRET_PREFIX}
 KS_B64=${P}_UPLOAD_KEYSTORE_B64 KS_PASS=${P}_UPLOAD_KEYSTORE_PASSWORD
 KEY_ALIAS=${P}_UPLOAD_KEY_ALIAS KEY_PASS=${P}_UPLOAD_KEY_PASSWORD
@@ -52,6 +59,10 @@ done
 # Publier un commit, pas un arbre de travail : le SHA affiché doit être ce qui est parti.
 [ -z "$(git status --porcelain -- composeApp core ble drivers simulator gradle build.gradle.kts settings.gradle.kts gradle.properties)" ] ||
     die 5 "modifications non commitées dans le code ou les fichiers de build"
+
+# Seulement un commit de main : les fusions sont en squash, un SHA de branche disparaîtrait.
+git fetch -q origin main || die 5 "git fetch origin main a échoué"
+git merge-base --is-ancestor HEAD origin/main || die 5 "HEAD n'est pas un commit de origin/main"
 
 umask 077
 TMP=$(mktemp -d "${PAPERCLIP_RUN_SCRATCH_DIR:-${TMPDIR:-/tmp}}/play-publish.XXXXXX")

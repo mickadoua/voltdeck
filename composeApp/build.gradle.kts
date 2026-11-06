@@ -62,14 +62,21 @@ fun git(vararg args: String): String? = runCatching {
     }.standardOutput.asText.get().trim().ifEmpty { null }
 }.getOrNull()
 
-val appVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt()
-    ?: run {
-        val livraison = gradle.startParameter.taskNames.any { "elease" in it || "publish" in it }
-        check(!livraison || git("rev-parse", "--is-shallow-repository") != "true") {
-            "Clone superficiel : le nombre de commits est faux. Cloner en entier (fetch-depth: 0) ou passer VERSION_CODE."
-        }
-        git("rev-list", "--count", "HEAD")?.toIntOrNull() ?: error("git rev-list a échoué : passer VERSION_CODE.")
+// Tâche de livraison : AAB ou envoi Play. Hors dépôt git (archive source du dépôt public), le
+// nombre de commits est inconnu : repli sur 1 avec un avertissement, sauf pour une livraison.
+val livraison = gradle.startParameter.taskNames.any { "bundle" in it || "publish" in it }
+val appVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.let {
+    it.toIntOrNull() ?: error("VERSION_CODE doit être un entier, reçu '$it'.")
+} ?: run {
+    check(!livraison || git("rev-parse", "--is-shallow-repository") != "true") {
+        "Clone superficiel : le nombre de commits est faux. Cloner en entier (fetch-depth: 0) ou passer VERSION_CODE."
     }
+    git("rev-list", "--count", "HEAD")?.toIntOrNull() ?: run {
+        check(!livraison) { "Pas de dépôt git : le versionCode est inconnu. Passer VERSION_CODE." }
+        logger.warn("Pas de dépôt git : versionCode = 1 (build hors livraison).")
+        1
+    }
+}
 val appVersionNameOverride = providers.environmentVariable("VERSION_NAME").orNull
 
 // Clé d'envoi Play (upload key), lue seulement dans l'environnement : bundleRelease signé pour
@@ -86,6 +93,17 @@ val uploadKeyMissing = uploadKeyEnv.filterValues { it == null }.keys
 if (uploadKeyMissing.isNotEmpty() && uploadKeyMissing.size < uploadKeyEnv.size) {
     throw GradleException("Clé d'envoi : il manque $uploadKeyMissing (les quatre UPLOAD_* ou aucune)")
 }
+
+// Pas d'AAB ni d'envoi Play sans la clé d'envoi : sinon le repli sur VOLTDECK_KEYSTORE_* signerait
+// l'AAB avec la clé des APK hors store, que Play enregistrerait comme clé d'envoi.
+tasks.matching { it.name == "bundleRelease" || it.name == "signReleaseBundle" || it.name.startsWith("publish") }
+    .configureEach {
+        doFirst {
+            if (uploadKeyMissing.isNotEmpty()) {
+                throw GradleException("$name exige la clé d'envoi : il manque $uploadKeyMissing")
+            }
+        }
+    }
 
 // Clé du compte de service Play, en chemin de fichier (scripts/play-publish.sh l'écrit dans un
 // fichier temporaire). Absente : Gradle Play Publisher reste éteint, un build ordinaire
