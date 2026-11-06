@@ -27,7 +27,7 @@ TRACK=internal; STATUS=draft; LISTING=0
 while [ $# -gt 0 ]; do
     case $1 in
         internal|alpha|beta|production) TRACK=$1 ;;
-        --release-status) STATUS=${2:-}; shift ;;
+        --release-status) [ $# -ge 2 ] || die 2 "--release-status exige une valeur"; STATUS=$2; shift ;;
         --listing) LISTING=1 ;;
         *) die 2 "argument inconnu '$1'" ;;
     esac
@@ -45,6 +45,8 @@ fi
 if [ "$LISTING" = 1 ]; then
     [[ ${MICKA_APPROVED_ISSUE:-} =~ ^[A-Z]+-[0-9]+$ ]] ||
         die 3 "--listing est public : MICKA_APPROVED_ISSUE=<ID>, la tâche avec l'accord écrit de Micka"
+    ls composeApp/src/main/play/listings/*/title.txt >/dev/null 2>&1 ||
+        die 6 "--listing : aucune fiche dans composeApp/src/main/play/listings/<langue>/ (rien ne serait publié)"
 fi
 
 P=${PLAY_SECRET_PREFIX:-$APP_SECRET_PREFIX}

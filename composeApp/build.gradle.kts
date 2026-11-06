@@ -66,7 +66,7 @@ fun git(vararg args: String): String? = runCatching {
 // nombre de commits est inconnu : repli sur 1 avec un avertissement, sauf pour une livraison.
 val livraison = gradle.startParameter.taskNames.any { "bundle" in it || "publish" in it }
 val appVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.let {
-    it.toIntOrNull() ?: error("VERSION_CODE doit être un entier, reçu '$it'.")
+    it.toIntOrNull()?.takeIf { n -> n > 0 } ?: error("VERSION_CODE doit être un entier positif, reçu '$it'.")
 } ?: run {
     check(!livraison || git("rev-parse", "--is-shallow-repository") != "true") {
         "Clone superficiel : le nombre de commits est faux. Cloner en entier (fetch-depth: 0) ou passer VERSION_CODE."
