@@ -1,0 +1,41 @@
+Voltdeck brings the Bluetooth readings of the 12/24 V electrical system of your van, boat or off-grid cabin into one app.
+
+One app instead of one per brand. A history that stays on your phone.
+
+WHAT YOU SEE
+
+• An overview: solar production, battery (charge %, voltage, current, power, temperature, cells, cycles), consumption and estimated runtime.
+• Statistics by day, week and month: energy produced and used, battery charge curve, minimums and maximums, comparison with the previous period. An accessible table backs up every chart.
+• Dark and light themes, with key numbers readable at a glance. The interface is currently in French.
+
+READ-ONLY
+
+Voltdeck reads, it never writes. The app sends your devices no command that changes a setting, a mode or a state.
+
+NO DATA LEAVES YOUR PHONE
+
+• No account, no sign-up.
+• The app has no permission to access the Internet.
+• No ads, no analytics, no crash reports sent.
+• History is stored on the device. Victron keys are kept in Android's secure keystore.
+
+SUPPORTED EQUIPMENT
+
+• Victron Energy (Instant Readout, passive listening to Bluetooth advertisements, no connection): SmartSolar MPPT, SmartShunt and BMV, Orion Smart DC-DC. You enter each device's key, shown in VictronConnect.
+• Lithium batteries with a JBD BMS, including Ultimatron and other brands.
+
+Voltdeck is young: these drivers are validated against reference data and a simulator, and feedback from real hardware is welcome. More brands can be added.
+
+SCREEN-OFF COLLECTION
+
+For a history without gaps, Voltdeck can read your devices in the background. A notification stays visible meanwhile, with a button to stop. Collection resumes after the phone restarts.
+
+TRY IT WITHOUT CONNECTING ANYTHING
+
+Demo mode shows the app with simulated values, with no Bluetooth and no permission.
+
+OPEN SOURCE
+
+Voltdeck's code is open (Apache-2.0 licence). You can check what it does.
+
+Voltdeck is not affiliated with any of the brands mentioned. Victron Energy, Ultimatron and JBD are trademarks of their owners.
