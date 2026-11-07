@@ -1,0 +1,41 @@
+Voltdeck réunit dans une seule app les mesures Bluetooth du système électrique 12/24 V de votre van, de votre bateau ou de votre cabane isolée.
+
+Une app au lieu d'une par marque. Un historique qui reste sur votre téléphone.
+
+CE QUE VOUS VOYEZ
+
+• Une vue d'ensemble : production solaire, batterie (charge en %, tension, courant, puissance, température, cellules, cycles), consommation et autonomie estimée.
+• Des statistiques par jour, semaine et mois : énergie produite et consommée, courbe de charge de la batterie, minimums et maximums, comparaison avec la période précédente. Un tableau accessible complète chaque graphique.
+• Un thème sombre et un thème clair, des chiffres lisibles d'un coup d'œil.
+
+LECTURE SEULE
+
+Voltdeck lit, il n'écrit jamais. L'app n'envoie à vos équipements aucune commande qui modifie un réglage, un mode ou un état.
+
+AUCUNE DONNÉE NE QUITTE VOTRE TÉLÉPHONE
+
+• Pas de compte, pas d'inscription.
+• L'app n'a pas l'autorisation d'accéder à Internet.
+• Pas de publicité, pas de mesure d'audience, pas de rapport d'incident envoyé.
+• L'historique est stocké sur l'appareil. Les clés Victron sont rangées dans le coffre sécurisé d'Android.
+
+ÉQUIPEMENTS PRIS EN CHARGE
+
+• Victron Energy (Instant Readout, écoute des annonces Bluetooth, sans connexion) : SmartSolar MPPT, SmartShunt et BMV, Orion Smart DC-DC. Il faut saisir la clé de chaque appareil, visible dans VictronConnect.
+• Batteries lithium à BMS JBD, dont Ultimatron et d'autres marques.
+
+Voltdeck est jeune : ces pilotes sont validés sur des données de référence et un simulateur, et les retours sur du matériel réel sont les bienvenus. D'autres marques pourront s'ajouter.
+
+COLLECTE ÉCRAN ÉTEINT
+
+Pour un historique sans trou, Voltdeck peut lire vos équipements en arrière-plan. Une notification reste affichée pendant ce temps, avec un bouton pour arrêter. La collecte reprend après un redémarrage du téléphone.
+
+ESSAYER SANS RIEN CONNECTER
+
+Le mode démo montre l'app avec des valeurs simulées, sans Bluetooth ni autorisation.
+
+OPEN SOURCE
+
+Le code de Voltdeck est ouvert (licence Apache-2.0). Vous pouvez vérifier ce qu'il fait.
+
+Voltdeck n'est affilié à aucune des marques citées. Victron Energy, Ultimatron et JBD sont des marques de leurs propriétaires.
