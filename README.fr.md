@@ -72,7 +72,7 @@ Stockage local SQLDelight : agrégats à la minute (30 jours), à l'heure, au jo
 
 ## Installer
 
-L'APK Android signé est joint à chaque [release](https://github.com/mickadoua/voltdeck/releases/latest) : téléchargez `voltdeck.apk`, ouvrez-le et autorisez l'installation depuis cette source quand Android le demande. L'app n'est pas sur le Play Store.
+L'APK Android signé est joint à chaque [release](https://github.com/mickadoua/voltdeck/releases/latest) : téléchargez `voltdeck.apk`, ouvrez-le et autorisez l'installation depuis cette source quand Android le demande. Chaque release porte aussi `voltdeck.apk.sha256` : `sha256sum -c voltdeck.apk.sha256` vérifie le fichier avant l'installation. L'app n'est pas sur le Play Store.
 
 ## Construire
 

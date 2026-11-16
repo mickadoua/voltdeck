@@ -72,7 +72,7 @@ Local SQLDelight storage: aggregates per minute (30 days), hour, day and month, 
 
 ## Install
 
-The signed Android APK is attached to each [release](https://github.com/mickadoua/voltdeck/releases/latest): download `voltdeck.apk`, open it and allow installs from that source when Android asks. The app is not on the Play Store.
+The signed Android APK is attached to each [release](https://github.com/mickadoua/voltdeck/releases/latest): download `voltdeck.apk`, open it and allow installs from that source when Android asks. Each release also carries `voltdeck.apk.sha256`: `sha256sum -c voltdeck.apk.sha256` checks the file before installing. The app is not on the Play Store.
 
 ## Publishing on Google Play (maintainers)
 
