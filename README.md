@@ -2,6 +2,8 @@
 
 **English** · [Français](README.fr.md)
 
+[Website](https://mickadoua.github.io/voltdeck/) · [Project page on dm-consulting.tech](https://www.dm-consulting.tech/en/open-source/voltdeck) · [Apache-2.0](LICENSE)
+
 A **read-only** mobile dashboard for the 12/24 V electrical systems of vans, boats and off-grid sites. It brings the Bluetooth readings of lithium batteries with a BMS, MPPT solar controllers, DC-DC chargers and shunts into a single app, whatever their brand.
 
 <p>
@@ -72,7 +74,7 @@ Local SQLDelight storage: aggregates per minute (30 days), hour, day and month, 
 
 ## Install
 
-The signed Android APK is attached to each [release](https://github.com/mickadoua/voltdeck/releases/latest): download `voltdeck.apk`, open it and allow installs from that source when Android asks. Each release also carries `voltdeck.apk.sha256`: `sha256sum -c voltdeck.apk.sha256` checks the file before installing. The app is not on the Play Store.
+The signed Android APK is attached to each [release](https://github.com/mickadoua/voltdeck/releases/latest): download `voltdeck.apk` (also at https://www.dm-consulting.tech/downloads/voltdeck.apk), open it and allow installs from that source when Android asks. Each release also carries `voltdeck.apk.sha256`: `sha256sum -c voltdeck.apk.sha256` checks the file before installing. The app is not on the Play Store.
 
 ## Publishing on Google Play (maintainers)
 
@@ -107,4 +109,4 @@ With no device registered, the app opens in demo mode: a simulated 200 Ah LiFePO
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Victron, Ultimatron and Jiabaida are trademarks of their respective owners; Voltdeck is not affiliated with any of them.
+Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). Victron, Ultimatron and Jiabaida are trademarks of their respective owners; Voltdeck is not affiliated with any of them. Voltdeck is a project of [DM Consulting](https://www.dm-consulting.tech).
