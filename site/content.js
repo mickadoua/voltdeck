@@ -4,7 +4,8 @@ window.SITE = {
   repo: 'https://github.com/mickadoua/voltdeck',
   dmcPage: { en: 'https://www.dm-consulting.tech/en/open-source/voltdeck', fr: 'https://www.dm-consulting.tech/fr/open-source/voltdeck' },
   common: { license: 'Apache-2.0', licenseUrl: 'https://github.com/mickadoua/voltdeck/blob/main/LICENSE' },
-  download: { build: 'https://github.com/mickadoua/voltdeck#build' }, // until the APK is published (DMC-586): apk: { url: 'https://www.dm-consulting.tech/downloads/voltdeck.apk', sha256: '', size: '' }
+  // APK of the latest release; the SHA-256 is the one in voltdeck.apk.sha256 of that release.
+  download: { apk: { url: 'https://www.dm-consulting.tech/downloads/voltdeck.apk', sha256: 'ebb1554c11a956ea250bd8fd19dfa6d513c8fb66878105d1297792d72472500d', size: '' } },
   shots: [{ src: 'accueil.png' }, { src: 'stats-jour.png' }, { src: 'stats-semaine.png' }, { src: 'accueil-clair.png' }],
   i18n: {
     en: { tagline: 'Read-only dashboard for 12/24 V systems', eyebrow: 'Android app · Apache-2.0',
@@ -21,7 +22,7 @@ window.SITE = {
         chips: ['Victron', 'JBD BMS', 'Demo mode', 'Light and dark'],
         checks: [['No network.', 'The build fails if the INTERNET permission appears.'], ['Keys stay local.', 'Victron keys live in the Android Keystore.'], ['Honest gaps.', 'A period without readings stays empty, never zero.']],
         facts: [['Platform', 'Android'], ['Devices', 'Victron, JBD'], ['License', 'Apache-2.0']] },
-      downloadTitle: 'Get Voltdeck', downloadIntro: 'The signed APK is on its way. Until then, build the app from source.', buildText: 'Clone the repository and follow the build steps (Android Studio or Gradle).',
+      downloadTitle: 'Get Voltdeck', downloadIntro: 'Install the signed APK on an Android phone, after checking its SHA-256.',
       downloadNote: 'Drivers have not been validated on real hardware yet.' },
     fr: { tagline: 'Tableau de bord en lecture seule pour installations 12/24 V', eyebrow: 'Appli Android · Apache-2.0',
       h1: 'Un seul tableau de bord pour <em>toute votre installation.</em>',
@@ -37,7 +38,7 @@ window.SITE = {
         chips: ['Victron', 'BMS JBD', 'Mode démo', 'Clair et sombre'],
         checks: [['Aucun réseau.', 'Le build échoue si la permission INTERNET apparaît.'], ['Clés en local.', 'Les clés Victron restent dans l’Android Keystore.'], ['Trous assumés.', 'Une période sans mesure reste vide, jamais à zéro.']],
         facts: [['Plateforme', 'Android'], ['Appareils', 'Victron, JBD'], ['Licence', 'Apache-2.0']] },
-      downloadTitle: 'Obtenir Voltdeck', downloadIntro: 'L’APK signé arrive bientôt. D’ici là, compilez l’appli depuis les sources.', buildText: 'Clonez le dépôt et suivez les étapes de compilation (Android Studio ou Gradle).',
+      downloadTitle: 'Obtenir Voltdeck', downloadIntro: 'Installez l’APK signé sur un téléphone Android, après avoir vérifié sa somme SHA-256.',
       downloadNote: 'Les pilotes n’ont pas encore été validés sur du matériel réel.' }
   }
 };
