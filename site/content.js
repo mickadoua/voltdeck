@@ -4,8 +4,8 @@ window.SITE = {
   repo: 'https://github.com/mickadoua/voltdeck',
   dmcPage: { en: 'https://www.dm-consulting.tech/en/open-source/voltdeck', fr: 'https://www.dm-consulting.tech/fr/open-source/voltdeck' },
   common: { license: 'Apache-2.0', licenseUrl: 'https://github.com/mickadoua/voltdeck/blob/main/LICENSE' },
-  // APK of the latest release; the SHA-256 is the one in voltdeck.apk.sha256 of that release.
-  download: { apk: { url: 'https://www.dm-consulting.tech/downloads/voltdeck.apk', sha256: 'ebb1554c11a956ea250bd8fd19dfa6d513c8fb66878105d1297792d72472500d', size: '' } },
+  // APK of the latest release; version and versionCode are read in the APK (aapt2 dump badging), builtOn is the day the CI attached it; the SHA-256 is the one in voltdeck.apk.sha256 of that release.
+  download: { apk: { url: 'https://www.dm-consulting.tech/downloads/voltdeck.apk', sha256: 'ebb1554c11a956ea250bd8fd19dfa6d513c8fb66878105d1297792d72472500d', size: '', version: '0.2.0', versionCode: 2, builtOn: '2026-10-18' } },
   shots: [{ src: 'accueil.png' }, { src: 'stats-jour.png' }, { src: 'stats-semaine.png' }, { src: 'accueil-clair.png' }],
   i18n: {
     en: { tagline: 'Read-only dashboard for 12/24 V systems', eyebrow: 'Android app · Apache-2.0',
